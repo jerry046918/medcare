@@ -1,0 +1,239 @@
+/* CSS Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.85);
+  background-color: #f5f5f5;
+}
+
+#root {
+  height: 100%;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 链接样式 */
+a {
+  color: #1890ff;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+a:hover {
+  color: #40a9ff;
+}
+
+/* 表格样式优化 */
+.ant-table-tbody > tr:hover > td {
+  background: #f5f5f5 !important;
+}
+
+/* 卡片阴影优化 */
+.ant-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+}
+
+/* 按钮样式优化 */
+.ant-btn {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* 输入框样式优化 */
+.ant-input,
+.ant-input-password,
+.ant-select-selector {
+  border-radius: 6px;
+}
+
+/* 模态框样式优化 */
+.ant-modal {
+  border-radius: 12px;
+}
+
+.ant-modal-header {
+  border-radius: 12px 12px 0 0;
+}
+
+/* 标签样式优化 */
+.ant-tag {
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* 统计数字样式优化 */
+.ant-statistic-content {
+  font-weight: 600;
+}
+
+/* 菜单样式优化 */
+.ant-menu-item {
+  border-radius: 6px;
+  margin: 4px 8px;
+  width: calc(100% - 16px);
+}
+
+.ant-menu-item-selected {
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+}
+
+/* 面包屑样式 */
+.ant-breadcrumb {
+  margin-bottom: 16px;
+}
+
+/* 加载动画优化 */
+.ant-spin-dot {
+  font-size: 20px;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .ant-card {
+    margin: 8px;
+  }
+  
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  
+  .ant-col {
+    margin-bottom: 16px;
+  }
+}
+
+/* 自定义工具类 */
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+.mb-24 {
+  margin-bottom: 24px;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+.mt-24 {
+  margin-top: 24px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 动画效果 */
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 健康状态颜色 */
+.health-normal {
+  color: #52c41a;
+}
+
+.health-warning {
+  color: #faad14;
+}
+
+.health-danger {
+  color: #ff4d4f;
+}
+
+/* 性别颜色 */
+.gender-male {
+  color: #1890ff;
+}
+
+.gender-female {
+  color: #f759ab;
+}
+
+/* 状态指示器 */
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.status-indicator.online {
+  background-color: #52c41a;
+}
+
+.status-indicator.offline {
+  background-color: #d9d9d9;
+}
+
+.status-indicator.warning {
+  background-color: #faad14;
+}
+
+.status-indicator.error {
+  background-color: #ff4d4f;
+}

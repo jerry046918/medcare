@@ -29,6 +29,7 @@ import {
   EyeOutlined
 } from '@ant-design/icons';
 import ocrAPI from '../services/ocrAPI';
+import { getErrorMessage } from '../utils/errorHandler';
 
 const { Text, Title, Paragraph } = Typography;
 const { Option } = Select;
@@ -109,7 +110,7 @@ const OCRReportRecognition = ({ visible, onCancel, onConfirm, indicators }) => {
       }
     } catch (error) {
       console.error('OCR 识别失败:', error);
-      message.error('OCR 识别失败: ' + (error.response?.data?.message || error.message));
+      message.error('OCR 识别失败: ' + getErrorMessage(error, '未知错误'));
     } finally {
       setOcrLoading(false);
     }
@@ -352,17 +353,17 @@ const OCRReportRecognition = ({ visible, onCancel, onConfirm, indicators }) => {
                 value={record.customIndicatorId}
                 onChange={(value) => handleIndicatorSelect(record.key, 'customIndicatorId', value)}
                 showSearch
-                optionFilterProp="children"
-                filterOption={(input, option) =>
-                  option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                }
-              >
-                {indicators.map(ind => (
-                  <Option key={ind.id} value={ind.id}>
-                    {ind.name} ({ind.unit})
-                  </Option>
-                ))}
-              </Select>
+                optionFilterProp="label"
+                filterOption={(input, option) => {
+                  const label = option.label || option.children;
+                  const labelStr = typeof label === 'string' ? label : String(label || '');
+                  return labelStr.toLowerCase().indexOf(input.toLowerCase()) >= 0;
+                }}
+                options={indicators.map(ind => ({
+                  value: ind.id,
+                  label: `${ind.name} (${ind.unit})`
+                }))}
+              />
               <Button 
                 type="link" 
                 size="small" 

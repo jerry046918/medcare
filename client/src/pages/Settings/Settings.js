@@ -99,7 +99,12 @@ const Settings = () => {
     if (value === 'numeric') {
       indicatorForm.setFieldsValue({ normalValue: undefined });
     } else if (value === 'qualitative') {
-      indicatorForm.setFieldsValue({ normalMin: undefined, normalMax: undefined });
+      indicatorForm.setFieldsValue({
+        normalMin: undefined,
+        normalMax: undefined,
+        normalMinFemale: undefined,
+        normalMaxFemale: undefined
+      });
     }
   };
 
@@ -194,8 +199,29 @@ const Settings = () => {
       title: '正常范围',
       key: 'normalRange',
       render: (_, record) => {
-        if (record.valueType === 'numeric' && record.normalMin !== null && record.normalMax !== null) {
-          return `${record.normalMin} - ${record.normalMax}`;
+        if (record.valueType === 'numeric') {
+          const parts = [];
+          if (record.normalMin !== null || record.normalMax !== null) {
+            if (record.normalMin !== null && record.normalMax !== null) {
+              parts.push(`${record.normalMin} - ${record.normalMax}`);
+            } else if (record.normalMin !== null) {
+              parts.push(`≥ ${record.normalMin}`);
+            } else {
+              parts.push(`≤ ${record.normalMax}`);
+            }
+          }
+          if (record.normalMinFemale !== null || record.normalMaxFemale !== null) {
+            let femaleRange = '';
+            if (record.normalMinFemale !== null && record.normalMaxFemale !== null) {
+              femaleRange = `${record.normalMinFemale} - ${record.normalMaxFemale}`;
+            } else if (record.normalMinFemale !== null) {
+              femaleRange = `≥ ${record.normalMinFemale}`;
+            } else {
+              femaleRange = `≤ ${record.normalMaxFemale}`;
+            }
+            parts.push(`女: ${femaleRange}`);
+          }
+          return parts.length > 0 ? parts.join(', 男: ') : '-';
         }
         if (record.valueType === 'qualitative' && record.normalValue) {
           return record.normalValue === 'positive' ? '阳性' : '阴性';
@@ -754,23 +780,45 @@ const Settings = () => {
               const valueType = getFieldValue('valueType');
               return valueType === 'numeric' ? (
                 <>
+                  <div style={{ marginBottom: 8, color: '#1890ff', fontWeight: 'bold', padding: '8px', background: '#e6f7ff', borderRadius: '4px' }}>
+                    至少填写最小值或最大值其中之一。如需区分性别，可填写女性专用范围。
+                  </div>
                   <Row gutter={16}>
                     <Col span={12}>
                       <Form.Item
                         name="normalMin"
-                        label="最小正常值"
-                        rules={[{ required: true, message: '请输入最小正常值' }]}
+                        label="最小正常值（通用/男性）"
                       >
-                        <InputNumber style={{ width: '100%' }} placeholder="请输入最小值" precision={2} />
+                        <InputNumber style={{ width: '100%' }} placeholder="无下限" precision={6} />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item
                         name="normalMax"
-                        label="最大正常值"
-                        rules={[{ required: true, message: '请输入最大正常值' }]}
+                        label="最大正常值（通用/男性）"
                       >
-                        <InputNumber style={{ width: '100%' }} placeholder="请输入最大值" precision={2} />
+                        <InputNumber style={{ width: '100%' }} placeholder="无上限" precision={6} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <div style={{ marginTop: 8, marginBottom: 8, fontWeight: 500 }}>
+                    女性专用范围（可选）
+                  </div>
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="normalMinFemale"
+                        label="女性最小正常值"
+                      >
+                        <InputNumber style={{ width: '100%' }} placeholder="与通用值相同" precision={6} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="normalMaxFemale"
+                        label="女性最大正常值"
+                      >
+                        <InputNumber style={{ width: '100%' }} placeholder="与通用值相同" precision={6} />
                       </Form.Item>
                     </Col>
                   </Row>
@@ -840,11 +888,32 @@ const Settings = () => {
               )}
             </Descriptions.Item>
             <Descriptions.Item label="正常范围">
-              {viewingIndicator.valueType === 'numeric' && viewingIndicator.normalMin !== null && viewingIndicator.normalMax !== null
-                ? `${viewingIndicator.normalMin} - ${viewingIndicator.normalMax}`
-                : viewingIndicator.valueType === 'qualitative' && viewingIndicator.normalValue
-                  ? (viewingIndicator.normalValue === 'positive' ? '阳性' : '阴性')
-                  : '-'}
+              {viewingIndicator.valueType === 'numeric' ? (
+                (() => {
+                  const parts = [];
+                  if (viewingIndicator.normalMin !== null || viewingIndicator.normalMax !== null) {
+                    if (viewingIndicator.normalMin !== null && viewingIndicator.normalMax !== null) {
+                      parts.push(`通用/男性: ${viewingIndicator.normalMin} - ${viewingIndicator.normalMax}`);
+                    } else if (viewingIndicator.normalMin !== null) {
+                      parts.push(`通用/男性: ≥ ${viewingIndicator.normalMin}`);
+                    } else {
+                      parts.push(`通用/男性: ≤ ${viewingIndicator.normalMax}`);
+                    }
+                  }
+                  if (viewingIndicator.normalMinFemale !== null || viewingIndicator.normalMaxFemale !== null) {
+                    if (viewingIndicator.normalMinFemale !== null && viewingIndicator.normalMaxFemale !== null) {
+                      parts.push(`女性: ${viewingIndicator.normalMinFemale} - ${viewingIndicator.normalMaxFemale}`);
+                    } else if (viewingIndicator.normalMinFemale !== null) {
+                      parts.push(`女性: ≥ ${viewingIndicator.normalMinFemale}`);
+                    } else {
+                      parts.push(`女性: ≤ ${viewingIndicator.normalMaxFemale}`);
+                    }
+                  }
+                  return parts.length > 0 ? parts.join('；') : '-';
+                })()
+              ) : viewingIndicator.valueType === 'qualitative' && viewingIndicator.normalValue
+                ? (viewingIndicator.normalValue === 'positive' ? '阳性' : '阴性')
+                : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="测试方法">{viewingIndicator.testMethod || '-'}</Descriptions.Item>
             <Descriptions.Item label="参考范围（文本）">{viewingIndicator.referenceRange || '-'}</Descriptions.Item>

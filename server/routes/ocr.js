@@ -8,11 +8,31 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const { authenticateToken } = require('../middleware/auth');
+const { ocrLimiter, uploadLimiter } = require('../middleware/rateLimiter');
 const { ocrService, OCR_ENGINE } = require('../services/ocrService');
 const { processOCRResult, createIndicatorFromExtracted } = require('../services/indicatorParserService');
 const { SystemConfig, MedicalIndicator } = require('../models');
+const {
+  sanitizeInput,
+  validatePath,
+  validateUploadedFile,
+  validateOCREngine
+} = require('../utils/security');
+const { upload: uploadConfig, allowedOCREngines } = require('../config');
 
 const router = express.Router();
+
+// 安全的文件名生成函数
+function generateSafeFilename(originalName) {
+  const ext = path.extname(originalName).toLowerCase();
+  // 只允许安全的扩展名
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.pdf'];
+  if (!allowedExtensions.includes(ext)) {
+    return null;
+  }
+  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+  return `ocr-${uniqueSuffix}${ext}`;
+}
 
 // 配置文件上传
 const storage = multer.diskStorage({
@@ -21,18 +41,21 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-    cb(null, `ocr-${uniqueSuffix}${path.extname(file.originalname)}`);
+    const safeName = generateSafeFilename(file.originalname);
+    if (!safeName) {
+      return cb(new Error('不支持的文件扩展名'));
+    }
+    cb(null, safeName);
   }
 });
 
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
+    fileSize: uploadConfig.maxFileSize // 10MB
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp', 'application/pdf'];
+    const allowedTypes = [...uploadConfig.allowedImageTypes, ...uploadConfig.allowedDocTypes];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -64,8 +87,8 @@ async function getOCRConfig() {
       } else if (item.configKey.startsWith('ocr_')) {
         const engineKey = item.configKey.replace('ocr_', '');
         try {
-          config[engineKey] = typeof item.configValue === 'string' 
-            ? JSON.parse(item.configValue) 
+          config[engineKey] = typeof item.configValue === 'string'
+            ? JSON.parse(item.configValue)
             : item.configValue;
         } catch (e) {
           config[engineKey] = item.configValue;
@@ -101,7 +124,7 @@ async function ensureOCRInitialized() {
  * POST /api/ocr/upload
  * 上传图片并进行 OCR 识别
  */
-router.post('/upload', authenticateToken, upload.single('image'), async (req, res) => {
+router.post('/upload', authenticateToken, ocrLimiter, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -110,18 +133,56 @@ router.post('/upload', authenticateToken, upload.single('image'), async (req, re
       });
     }
 
-    const { engine } = req.body;
-    const filePath = req.file.path;
+    // 验证上传的文件
+    const allowedTypes = [...uploadConfig.allowedImageTypes, ...uploadConfig.allowedDocTypes];
+    const validation = await validateUploadedFile(req.file, allowedTypes);
+    if (!validation.valid) {
+      // 删除不合法的文件
+      try {
+        await fs.unlink(req.file.path);
+      } catch (e) {
+        // 忽略删除错误
+      }
+      return res.status(400).json({
+        success: false,
+        message: validation.error
+      });
+    }
 
-    // 读取文件
-    const imageBuffer = await fs.readFile(filePath);
+    const { engine } = req.body;
+
+    // 验证 OCR 引擎参数
+    let useEngine = engine;
+    if (engine && !validateOCREngine(engine)) {
+      console.warn(`[OCR] 无效的引擎参数: ${engine}`);
+      useEngine = null; // 使用默认引擎
+    }
+
+    // 安全地读取文件
+    const baseDir = path.join(__dirname, '../uploads/ocr');
+    const safePath = validatePath(req.file.path, baseDir);
+    if (!safePath) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的文件路径'
+      });
+    }
+
+    const imageBuffer = await fs.readFile(safePath);
 
     // 初始化 OCR 服务
     const service = await ensureOCRInitialized();
 
     // 获取配置以确定使用的引擎
     const config = await getOCRConfig();
-    const useEngine = engine || config.defaultEngine;
+    if (!useEngine) {
+      useEngine = config.defaultEngine;
+    }
+
+    // 再次验证最终使用的引擎
+    if (!allowedOCREngines.includes(useEngine)) {
+      useEngine = OCR_ENGINE.PADDLEOCR;
+    }
 
     // 执行 OCR 识别
     const ocrResult = await service.recognize(imageBuffer, {
@@ -131,7 +192,7 @@ router.post('/upload', authenticateToken, upload.single('image'), async (req, re
 
     // 清理临时文件
     try {
-      await fs.unlink(filePath);
+      await fs.unlink(safePath);
     } catch (e) {
       console.warn('清理临时文件失败:', e.message);
     }
@@ -146,10 +207,18 @@ router.post('/upload', authenticateToken, upload.single('image'), async (req, re
 
   } catch (error) {
     console.error('OCR 识别失败:', error);
+    // 清理临时文件
+    if (req.file?.path) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (e) {
+        // 忽略
+      }
+    }
     res.status(500).json({
       success: false,
       message: 'OCR 识别失败',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? '服务器错误' : error.message
     });
   }
 });
@@ -169,8 +238,11 @@ router.post('/parse', authenticateToken, async (req, res) => {
       });
     }
 
+    // 限制文本长度
+    const sanitizedText = sanitizeInput(text, { maxLength: 50000, stripTags: false });
+
     // 处理 OCR 结果，提取和匹配指标
-    const result = await processOCRResult({ text });
+    const result = await processOCRResult({ text: sanitizedText });
 
     res.json({
       success: true,
@@ -181,8 +253,7 @@ router.post('/parse', authenticateToken, async (req, res) => {
     console.error('指标解析失败:', error);
     res.status(500).json({
       success: false,
-      message: '指标解析失败',
-      error: error.message
+      message: '指标解析失败'
     });
   }
 });
@@ -191,7 +262,7 @@ router.post('/parse', authenticateToken, async (req, res) => {
  * POST /api/ocr/recognize-and-parse
  * 上传图片，识别并解析（一站式接口）
  */
-router.post('/recognize-and-parse', authenticateToken, upload.single('image'), async (req, res) => {
+router.post('/recognize-and-parse', authenticateToken, ocrLimiter, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -200,18 +271,52 @@ router.post('/recognize-and-parse', authenticateToken, upload.single('image'), a
       });
     }
 
-    const { engine } = req.body;
-    const filePath = req.file.path;
+    // 验证上传的文件
+    const allowedTypes = [...uploadConfig.allowedImageTypes, ...uploadConfig.allowedDocTypes];
+    const validation = await validateUploadedFile(req.file, allowedTypes);
+    if (!validation.valid) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (e) {}
+      return res.status(400).json({
+        success: false,
+        message: validation.error
+      });
+    }
 
-    // 读取文件
-    const imageBuffer = await fs.readFile(filePath);
+    const { engine } = req.body;
+
+    // 验证 OCR 引擎参数
+    let useEngine = engine;
+    if (engine && !validateOCREngine(engine)) {
+      useEngine = null;
+    }
+
+    // 安全地读取文件
+    const baseDir = path.join(__dirname, '../uploads/ocr');
+    const safePath = validatePath(req.file.path, baseDir);
+    if (!safePath) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的文件路径'
+      });
+    }
+
+    const imageBuffer = await fs.readFile(safePath);
 
     // 初始化 OCR 服务
     const service = await ensureOCRInitialized();
 
     // 获取配置以确定使用的引擎
     const config = await getOCRConfig();
-    const useEngine = engine || config.defaultEngine;
+    if (!useEngine) {
+      useEngine = config.defaultEngine;
+    }
+
+    // 再次验证最终使用的引擎
+    if (!allowedOCREngines.includes(useEngine)) {
+      useEngine = OCR_ENGINE.PADDLEOCR;
+    }
 
     // 1. 执行 OCR 识别
     const ocrResult = await service.recognize(imageBuffer, {
@@ -224,7 +329,7 @@ router.post('/recognize-and-parse', authenticateToken, upload.single('image'), a
 
     // 清理临时文件
     try {
-      await fs.unlink(filePath);
+      await fs.unlink(safePath);
     } catch (e) {
       console.warn('清理临时文件失败:', e.message);
     }
@@ -240,10 +345,16 @@ router.post('/recognize-and-parse', authenticateToken, upload.single('image'), a
 
   } catch (error) {
     console.error('OCR 识别和解析失败:', error);
+    // 清理临时文件
+    if (req.file?.path) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (e) {}
+    }
     res.status(500).json({
       success: false,
       message: 'OCR 识别和解析失败',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? '服务器错误' : error.message
     });
   }
 });
@@ -263,7 +374,15 @@ router.post('/create-indicator', authenticateToken, async (req, res) => {
       });
     }
 
-    const indicator = await createIndicatorFromExtracted(extracted, type || '血液');
+    // 消毒输入
+    const sanitizedExtracted = {
+      ...extracted,
+      name: sanitizeInput(extracted.name, { maxLength: 100 }),
+      unit: sanitizeInput(extracted.unit, { maxLength: 20 })
+    };
+    const sanitizedType = sanitizeInput(type || '血液', { maxLength: 20 });
+
+    const indicator = await createIndicatorFromExtracted(sanitizedExtracted, sanitizedType);
 
     res.json({
       success: true,
@@ -275,8 +394,7 @@ router.post('/create-indicator', authenticateToken, async (req, res) => {
     console.error('创建指标失败:', error);
     res.status(500).json({
       success: false,
-      message: '创建指标失败',
-      error: error.message
+      message: '创建指标失败'
     });
   }
 });
@@ -299,8 +417,7 @@ router.get('/engines', authenticateToken, async (req, res) => {
     console.error('获取引擎列表失败:', error);
     res.status(500).json({
       success: false,
-      message: '获取引擎列表失败',
-      error: error.message
+      message: '获取引擎列表失败'
     });
   }
 });
@@ -325,8 +442,7 @@ router.get('/config', authenticateToken, async (req, res) => {
     console.error('获取 OCR 配置失败:', error);
     res.status(500).json({
       success: false,
-      message: '获取 OCR 配置失败',
-      error: error.message
+      message: '获取 OCR 配置失败'
     });
   }
 });
@@ -334,7 +450,7 @@ router.get('/config', authenticateToken, async (req, res) => {
 /**
  * POST /api/ocr/confirm-match
  * 用户确认指标匹配，自动学习别名
- * 
+ *
  * 当用户手动选择一个指标来匹配 OCR 识别结果时，
  * 系统会自动将 OCR 识别的名称添加为该指标的别名
  */
@@ -349,8 +465,17 @@ router.post('/confirm-match', authenticateToken, async (req, res) => {
       });
     }
 
+    // 验证 ID
+    const validId = parseInt(indicatorId, 10);
+    if (isNaN(validId) || validId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的指标ID'
+      });
+    }
+
     // 查找指标
-    const indicator = await MedicalIndicator.findByPk(indicatorId);
+    const indicator = await MedicalIndicator.findByPk(validId);
     if (!indicator) {
       return res.status(404).json({
         success: false,
@@ -358,17 +483,17 @@ router.post('/confirm-match', authenticateToken, async (req, res) => {
       });
     }
 
-    // 清理识别名称
-    const cleanExtractedName = extractedName.trim();
+    // 清理识别名称（消毒）
+    const cleanExtractedName = sanitizeInput(extractedName.trim(), { maxLength: 100 });
 
     // 检查是否需要添加别名
     let aliasAdded = false;
     if (autoAddAlias) {
       // 获取现有别名
       const currentAliases = indicator.aliases || [];
-      
+
       // 检查是否已经存在（精确匹配或与名称相同）
-      const alreadyExists = 
+      const alreadyExists =
         indicator.name === cleanExtractedName ||
         currentAliases.includes(cleanExtractedName);
 
@@ -377,7 +502,7 @@ router.post('/confirm-match', authenticateToken, async (req, res) => {
         const newAliases = [...currentAliases, cleanExtractedName];
         await indicator.update({ aliases: newAliases });
         aliasAdded = true;
-        
+
         console.log(`[OCR] 学习新别名: 指标 "${indicator.name}" 添加别名 "${cleanExtractedName}"`);
       }
     }
@@ -398,8 +523,7 @@ router.post('/confirm-match', authenticateToken, async (req, res) => {
     console.error('确认匹配失败:', error);
     res.status(500).json({
       success: false,
-      message: '确认匹配失败',
-      error: error.message
+      message: '确认匹配失败'
     });
   }
 });

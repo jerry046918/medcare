@@ -64,6 +64,7 @@ server/server.log
 test-*.json
 test-*.png
 test-*.jpg
+test-*.js
 ocr-result-*.png
 testcase/
 nul
@@ -86,10 +87,11 @@ coverage/
 .parcel-cache/
 .eslintcache
 
-# Package manager locks (keep only one)
-# Keep package-lock.json, ignore yarn.lock if using npm
-# yarn.lock
-# pnpm-lock.yaml
+# Deployment
+.vercel/
+
+# AI development files
+AGENTS.md
 
 # OS files
 .DS_Store
@@ -104,3 +106,6 @@ Thumbs.db
 *.bak
 *.tmp
 *.temp
+
+# Claude Code memory
+.claude/

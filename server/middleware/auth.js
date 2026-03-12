@@ -1,7 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'medcare_family_system_secret_key';
+const { jwt: jwtConfig } = require('../config');
 
 // JWT认证中间件
 const authenticateToken = async (req, res, next) => {
@@ -17,8 +16,8 @@ const authenticateToken = async (req, res, next) => {
     }
 
     // 验证token
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
+    const decoded = jwt.verify(token, jwtConfig.secret);
+
     // 查找用户
     const user = await User.findByPk(decoded.id);
     if (!user) {
@@ -42,7 +41,7 @@ const authenticateToken = async (req, res, next) => {
         message: 'Token无效'
       });
     }
-    
+
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,

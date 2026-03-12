@@ -49,7 +49,7 @@ async function updateSchema() {
     
     try {
       await sequelize.query(`
-        ALTER TABLE medical_indicators 
+        ALTER TABLE medical_indicators
         ADD COLUMN normalValue TEXT CHECK (normalValue IN ('positive', 'negative'))
       `);
       console.log('添加 normalValue 字段成功');
@@ -58,6 +58,35 @@ async function updateSchema() {
         console.log('normalValue 字段已存在');
       } else {
         console.log('添加 normalValue 字段失败:', error.message);
+      }
+    }
+
+    // 添加女性专用参考范围字段
+    try {
+      await sequelize.query(`
+        ALTER TABLE medical_indicators
+        ADD COLUMN normalMinFemale DECIMAL(15,6)
+      `);
+      console.log('添加 normalMinFemale 字段成功');
+    } catch (error) {
+      if (error.message.includes('duplicate column name')) {
+        console.log('normalMinFemale 字段已存在');
+      } else {
+        console.log('添加 normalMinFemale 字段失败:', error.message);
+      }
+    }
+
+    try {
+      await sequelize.query(`
+        ALTER TABLE medical_indicators
+        ADD COLUMN normalMaxFemale DECIMAL(15,6)
+      `);
+      console.log('添加 normalMaxFemale 字段成功');
+    } catch (error) {
+      if (error.message.includes('duplicate column name')) {
+        console.log('normalMaxFemale 字段已存在');
+      } else {
+        console.log('添加 normalMaxFemale 字段失败:', error.message);
       }
     }
     

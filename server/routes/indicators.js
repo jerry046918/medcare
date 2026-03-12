@@ -53,18 +53,20 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // 创建指标
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { 
-      name, 
-      unit, 
-      type, 
+    const {
+      name,
+      unit,
+      type,
       valueType,
       normalMin,
       normalMax,
+      normalMinFemale,
+      normalMaxFemale,
       normalValue,
-      testMethod, 
-      referenceRange, 
-      description, 
-      isDefault 
+      testMethod,
+      referenceRange,
+      description,
+      isDefault
     } = req.body;
 
     // 验证必填字段
@@ -75,11 +77,11 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
 
-    // 验证数值型指标的正常范围
-    if (valueType === 'numeric' && (normalMin === undefined || normalMax === undefined)) {
+    // 验证数值型指标的正常范围（至少需要填写一个边界值）
+    if (valueType === 'numeric' && normalMin === undefined && normalMax === undefined) {
       return res.status(400).json({
         success: false,
-        message: '数值型指标必须设置最小值和最大值'
+        message: '数值型指标至少需要设置最小值或最大值其中之一'
       });
     }
 
@@ -98,6 +100,8 @@ router.post('/', authenticateToken, async (req, res) => {
       valueType,
       normalMin: valueType === 'numeric' ? normalMin : null,
       normalMax: valueType === 'numeric' ? normalMax : null,
+      normalMinFemale: valueType === 'numeric' ? normalMinFemale : null,
+      normalMaxFemale: valueType === 'numeric' ? normalMaxFemale : null,
       normalValue: valueType === 'qualitative' ? normalValue : null,
       testMethod: testMethod || null,
       referenceRange: referenceRange || null,
@@ -123,18 +127,20 @@ router.post('/', authenticateToken, async (req, res) => {
 // 更新指标
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    const { 
-      name, 
-      unit, 
-      type, 
+    const {
+      name,
+      unit,
+      type,
       valueType,
       normalMin,
       normalMax,
+      normalMinFemale,
+      normalMaxFemale,
       normalValue,
-      testMethod, 
-      referenceRange, 
-      description, 
-      isDefault 
+      testMethod,
+      referenceRange,
+      description,
+      isDefault
     } = req.body;
 
     const indicator = await MedicalIndicator.findByPk(req.params.id);
@@ -149,10 +155,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // 如果更新了值类型，验证相应的正常值字段
     const newValueType = valueType || indicator.valueType;
     if (valueType && valueType !== indicator.valueType) {
-      if (valueType === 'numeric' && (normalMin === undefined || normalMax === undefined)) {
+      if (valueType === 'numeric' && normalMin === undefined && normalMax === undefined) {
         return res.status(400).json({
           success: false,
-          message: '数值型指标必须设置最小值和最大值'
+          message: '数值型指标至少需要设置最小值或最大值其中之一'
         });
       }
       if (valueType === 'qualitative' && !normalValue) {
@@ -170,6 +176,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
       valueType: valueType || indicator.valueType,
       normalMin: newValueType === 'numeric' ? (normalMin !== undefined ? normalMin : indicator.normalMin) : null,
       normalMax: newValueType === 'numeric' ? (normalMax !== undefined ? normalMax : indicator.normalMax) : null,
+      normalMinFemale: newValueType === 'numeric' ? (normalMinFemale !== undefined ? normalMinFemale : indicator.normalMinFemale) : null,
+      normalMaxFemale: newValueType === 'numeric' ? (normalMaxFemale !== undefined ? normalMaxFemale : indicator.normalMaxFemale) : null,
       normalValue: newValueType === 'qualitative' ? (normalValue !== undefined ? normalValue : indicator.normalValue) : null,
       testMethod: testMethod !== undefined ? testMethod : indicator.testMethod,
       referenceRange: referenceRange !== undefined ? referenceRange : indicator.referenceRange,

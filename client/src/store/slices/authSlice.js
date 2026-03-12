@@ -1,6 +1,33 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import authAPI from '../../services/authAPI';
 
+/**
+ * 从 localStorage 获取初始 token
+ * 使用单一数据源原则：localStorage 是 token 的真实来源
+ */
+const getInitialToken = () => {
+  try {
+    return localStorage.getItem('token');
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 同步 token 到 localStorage
+ */
+const syncTokenToStorage = (token) => {
+  try {
+    if (token) {
+      localStorage.setItem('token', token);
+    } else {
+      localStorage.removeItem('token');
+    }
+  } catch (error) {
+    console.error('[Auth] 同步 token 失败:', error);
+  }
+};
+
 // 异步thunk：检查认证状态
 export const checkAuthStatus = createAsyncThunk(
   'auth/checkAuthStatus',
@@ -10,26 +37,27 @@ export const checkAuthStatus = createAsyncThunk(
       if (response.data.needsSetup) {
         return { needsSetup: true, isAuthenticated: false };
       }
-      
-      const token = localStorage.getItem('token');
+
+      const token = getInitialToken();
       if (!token) {
         return { isAuthenticated: false, needsSetup: false };
       }
-      
+
       try {
         const verifyResponse = await authAPI.verifyToken();
         return {
           isAuthenticated: true,
           user: verifyResponse.data.data.user,
-          needsSetup: false
+          needsSetup: false,
+          token
         };
       } catch (verifyError) {
         // Token验证失败，清除token
-        localStorage.removeItem('token');
+        syncTokenToStorage(null);
         return { isAuthenticated: false, needsSetup: false };
       }
     } catch (error) {
-      localStorage.removeItem('token');
+      syncTokenToStorage(null);
       return { isAuthenticated: false, needsSetup: false };
     }
   }
@@ -42,10 +70,12 @@ export const login = createAsyncThunk(
     try {
       const response = await authAPI.login(credentials);
       const { user, token } = response.data.data;
-      localStorage.setItem('token', token);
+      // 同步 token 到 localStorage
+      syncTokenToStorage(token);
       return { user, token };
     } catch (error) {
-      return rejectWithValue(error.userMessage || error.response?.data?.message || '登录失败');
+      const message = error.userMessage || error.response?.data?.message || '登录失败';
+      return rejectWithValue(message);
     }
   }
 );
@@ -57,35 +87,51 @@ export const register = createAsyncThunk(
     try {
       const response = await authAPI.register(userData);
       const { user, token } = response.data.data;
-      localStorage.setItem('token', token);
+      // 同步 token 到 localStorage
+      syncTokenToStorage(token);
       return { user, token };
     } catch (error) {
-      return rejectWithValue(error.userMessage || error.response?.data?.message || '注册失败');
+      const message = error.userMessage || error.response?.data?.message || '注册失败';
+      return rejectWithValue(message);
     }
   }
 );
 
+const initialState = {
+  user: null,
+  token: getInitialToken(),
+  isAuthenticated: false,
+  isLoading: true,
+  needsSetup: false,
+  error: null,
+  logoutReason: null // 登出原因（用于显示不同的提示）
+};
+
 const authSlice = createSlice({
   name: 'auth',
-  initialState: {
-    user: null,
-    token: localStorage.getItem('token'),
-    isAuthenticated: false,
-    isLoading: true,
-    needsSetup: false,
-    error: null,
-  },
+  initialState,
   reducers: {
-    logout: (state) => {
+    logout: (state, action) => {
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
       state.error = null;
-      localStorage.removeItem('token');
+      state.logoutReason = action?.payload?.reason || null;
+      syncTokenToStorage(null);
     },
     clearError: (state) => {
       state.error = null;
     },
+    clearLogoutReason: (state) => {
+      state.logoutReason = null;
+    },
+    // 处理来自 API 拦截器的登出事件
+    handleAuthExpired: (state) => {
+      state.user = null;
+      state.token = null;
+      state.isAuthenticated = false;
+      state.logoutReason = 'token_expired';
+    }
   },
   extraReducers: (builder) => {
     builder
@@ -97,12 +143,14 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.isAuthenticated = action.payload.isAuthenticated || false;
         state.user = action.payload.user || null;
+        state.token = action.payload.token || state.token;
         state.needsSetup = action.payload.needsSetup || false;
       })
       .addCase(checkAuthStatus.rejected, (state) => {
         state.isLoading = false;
         state.isAuthenticated = false;
         state.user = null;
+        state.token = null;
         state.needsSetup = false;
       })
       // login
@@ -142,5 +190,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError } = authSlice.actions;
+export const { logout, clearError, clearLogoutReason, handleAuthExpired } = authSlice.actions;
 export default authSlice.reducer;

@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Layout, Spin } from 'antd';
+import { Layout, Spin, message } from 'antd';
 import { useDispatch, useSelector } from 'react-redux';
-import { checkAuthStatus } from './store/slices/authSlice';
+import { checkAuthStatus, handleAuthExpired, clearLogoutReason } from './store/slices/authSlice';
 import MainLayout from './components/Layout/MainLayout';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
@@ -14,7 +14,6 @@ import Reports from './pages/Reports/Reports';
 import ReportUpload from './pages/Reports/ReportUpload';
 import ReportDetail from './pages/Reports/ReportDetail';
 import ReportEdit from './pages/Reports/ReportEdit';
-import Indicators from './pages/Indicators/Indicators';
 import Settings from './pages/Settings/Settings';
 import './App.css';
 
@@ -22,11 +21,40 @@ const { Content } = Layout;
 
 function App() {
   const dispatch = useDispatch();
-  const { isAuthenticated, isLoading, needsSetup } = useSelector(state => state.auth);
+  const { isAuthenticated, isLoading, needsSetup, logoutReason } = useSelector(state => state.auth);
 
   useEffect(() => {
     dispatch(checkAuthStatus());
   }, [dispatch]);
+
+  // 监听来自 API 拦截器的认证过期事件
+  useEffect(() => {
+    const handleAuthLogout = (event) => {
+      console.log('[App] 收到认证过期事件:', event.detail);
+      dispatch(handleAuthExpired());
+
+      // 显示提示消息
+      if (event.detail?.reason === 'token_expired') {
+        message.warning('登录已过期，请重新登录');
+      }
+    };
+
+    window.addEventListener('auth:logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, [dispatch]);
+
+  // 处理登出原因提示
+  useEffect(() => {
+    if (logoutReason && !isAuthenticated) {
+      if (logoutReason === 'token_expired') {
+        message.info('登录已过期，请重新登录');
+      }
+      dispatch(clearLogoutReason());
+    }
+  }, [logoutReason, isAuthenticated, dispatch]);
 
   if (isLoading) {
     return (
@@ -70,7 +98,6 @@ function App() {
         <Route path="reports/upload" element={<ReportUpload />} />
         <Route path="reports/:id/edit" element={<ReportEdit />} />
         <Route path="reports/:id" element={<ReportDetail />} />
-        <Route path="indicators" element={<Indicators />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

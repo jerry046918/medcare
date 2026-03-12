@@ -86,20 +86,38 @@ module.exports = (sequelize) => {
         if (!isNaN(numValue)) {
           instance.numericValue = numValue;
         }
-        
+
         // 自动判断是否正常（需要关联查询指标信息）
         if (instance.indicatorId) {
-          const { MedicalIndicator } = require('./index');
+          const { MedicalIndicator, FamilyMember, MedicalReport } = require('./index');
           const indicator = await MedicalIndicator.findByPk(instance.indicatorId);
-          
+
           if (indicator) {
             if (indicator.valueType === 'numeric') {
               // 数值型指标判断
-              if (indicator.normalMin !== null && indicator.normalMax !== null && instance.numericValue !== null) {
-                if (instance.numericValue < indicator.normalMin) {
+              // 获取家庭成员的性别，以便选择合适的参考范围
+              let min = indicator.normalMin;
+              let max = indicator.normalMax;
+
+              // 如果有关联的报告，获取家庭成员信息以判断性别
+              if (instance.reportId) {
+                const report = await MedicalReport.findByPk(instance.reportId);
+                if (report && report.memberId) {
+                  const familyMember = await FamilyMember.findByPk(report.memberId);
+                  // 如果是女性且有女性专用参考范围，则使用女性范围
+                  if (familyMember?.gender === '女' && indicator.normalMinFemale !== null) {
+                    min = indicator.normalMinFemale;
+                    max = indicator.normalMaxFemale;
+                  }
+                }
+              }
+
+              // 支持只有 min 或只有 max 的情况
+              if (instance.numericValue !== null) {
+                if (min !== null && instance.numericValue < min) {
                   instance.isNormal = false;
                   instance.abnormalType = 'low';
-                } else if (instance.numericValue > indicator.normalMax) {
+                } else if (max !== null && instance.numericValue > max) {
                   instance.isNormal = false;
                   instance.abnormalType = 'high';
                 } else {
@@ -113,7 +131,7 @@ module.exports = (sequelize) => {
               // indicator.normalValue 也是 'positive' 或 'negative'
               if (indicator.normalValue) {
                 const isNormal = instance.value === indicator.normalValue;
-                
+
                 instance.isNormal = isNormal;
                 instance.abnormalType = isNormal ? 'normal' : 'abnormal';
               }

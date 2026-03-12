@@ -1,15 +1,20 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
+const { jwt: jwtConfig } = require('../config');
+const { authLimiter } = require('../middleware/rateLimiter');
+const { sanitizeInput, validateDate } = require('../utils/security');
+
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'medcare_family_system_secret_key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-
 // 用户注册（仅限首次使用）
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
+    let { username, password } = req.body;
+
+    // 输入消毒
+    username = sanitizeInput(username, { maxLength: 50 });
+    password = sanitizeInput(password, { maxLength: 100, stripTags: false }); // 密码不移除标签，但限制长度
 
     // 验证输入
     if (!username || !password) {
@@ -19,10 +24,33 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    // 用户名格式验证
+    const usernameRegex = /^[a-zA-Z0-9_\u4e00-\u9fa5]+$/;
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({
+        success: false,
+        message: '用户名只能包含字母、数字、下划线和中文'
+      });
+    }
+
+    if (username.length < 2 || username.length > 50) {
+      return res.status(400).json({
+        success: false,
+        message: '用户名长度需要在2-50个字符之间'
+      });
+    }
+
     if (password.length < 6) {
       return res.status(400).json({
         success: false,
         message: '密码长度至少为6位'
+      });
+    }
+
+    if (password.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: '密码长度不能超过100位'
       });
     }
 
@@ -50,8 +78,8 @@ router.post('/register', async (req, res) => {
     // 生成JWT token
     const token = jwt.sign(
       { id: user.id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
+      jwtConfig.secret,
+      { expiresIn: jwtConfig.expiresIn }
     );
 
     res.status(201).json({
@@ -68,18 +96,25 @@ router.post('/register', async (req, res) => {
     });
   } catch (error) {
     console.error('注册失败:', error);
+    // 生产环境不暴露详细错误
+    const message = process.env.NODE_ENV === 'production'
+      ? '注册失败，请稍后重试'
+      : `注册失败: ${error.message}`;
     res.status(500).json({
       success: false,
-      message: '注册失败',
-      error: error.message
+      message
     });
   }
 });
 
 // 用户登录
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
+    let { username, password } = req.body;
+
+    // 输入消毒
+    username = sanitizeInput(username, { maxLength: 50 });
+    password = sanitizeInput(password, { maxLength: 100, stripTags: false });
 
     // 验证输入
     if (!username || !password) {
@@ -92,6 +127,7 @@ router.post('/login', async (req, res) => {
     // 查找用户
     const user = await User.findOne({ where: { username } });
     if (!user) {
+      // 使用通用错误消息防止用户名枚举
       return res.status(401).json({
         success: false,
         message: '用户名或密码错误'
@@ -110,8 +146,8 @@ router.post('/login', async (req, res) => {
     // 生成JWT token
     const token = jwt.sign(
       { id: user.id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
+      jwtConfig.secret,
+      { expiresIn: jwtConfig.expiresIn }
     );
 
     res.json({
@@ -128,10 +164,12 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('登录失败:', error);
+    const message = process.env.NODE_ENV === 'production'
+      ? '登录失败，请稍后重试'
+      : `登录失败: ${error.message}`;
     res.status(500).json({
       success: false,
-      message: '登录失败',
-      error: error.message
+      message
     });
   }
 });
@@ -140,7 +178,7 @@ router.post('/login', async (req, res) => {
 router.get('/verify', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -148,9 +186,9 @@ router.get('/verify', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, jwtConfig.secret);
     const user = await User.findByPk(decoded.id);
-    
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -191,8 +229,7 @@ router.get('/init-status', async (req, res) => {
     console.error('检查初始化状态失败:', error);
     res.status(500).json({
       success: false,
-      message: '检查初始化状态失败',
-      error: error.message
+      message: '检查初始化状态失败'
     });
   }
 });

@@ -70,7 +70,18 @@ module.exports = (sequelize) => {
     normalMax: {
       type: DataTypes.DECIMAL(15, 6),
       allowNull: true,
-      comment: '数值型指标的最大正常值'
+      comment: '数值型指标的最大正常值（通用/男性）'
+    },
+    // 性别特定参考范围（女性专用，可选）
+    normalMinFemale: {
+      type: DataTypes.DECIMAL(15, 6),
+      allowNull: true,
+      comment: '女性专用最小正常值（如与通用值不同时填写）'
+    },
+    normalMaxFemale: {
+      type: DataTypes.DECIMAL(15, 6),
+      allowNull: true,
+      comment: '女性专用最大正常值（如与通用值不同时填写）'
     },
     // 定性指标的正常值
     normalValue: {

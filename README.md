@@ -1,17 +1,17 @@
-# 家庭健康管理系统
+# 家庭健康管理系统 (MedCare)
 
 一个基于 React + Node.js + SQLite 的全栈家庭健康管理应用，帮助家庭管理成员的健康信息和医疗报告。
 
 ## 功能特性
 
-- 👥 **家庭成员管理** - 添加、编辑、删除家庭成员信息
-- 📋 **医疗报告管理** - 上传、查看、管理医疗报告
-- 📊 **健康指标监测** - 管理和跟踪各种健康指标
-- 📈 **数据可视化** - 健康趋势图表展示
-- 🔐 **安全认证** - JWT 用户认证系统
+- 👥 **家庭成员管理** - 添加、编辑、删除家庭成员信息，支持性别区分
+- 📋 **医疗报告管理** - 上传、查看、管理医疗报告，支持图片/PDF
+- 📊 **健康指标监测** - 管理和跟踪各种健康指标，支持性别区分的参考范围
+- 📈 **数据可视化** - 健康趋势图表展示，自动判断指标是否正常
+- 🔐 **安全认证** - JWT 用户认证系统，密码 bcrypt 加密
 - 💾 **数据导入导出** - 支持数据备份和恢复
 - 📱 **响应式设计** - 支持桌面和移动设备
-- 🔄 **OCR 报告识别** - 自动识别医疗报告中的文字和数据（PaddleOCR）
+- 🔄 **OCR 报告识别** - 自动识别医疗报告中的文字和数据（支持 PaddleOCR、OpenAI Vision 等）
 ## 技术栈
 
 ### 前端
@@ -183,10 +183,16 @@ medcare/
 - id, reportDate, hospitalName, doctorName, pdfPath, notes, familyMemberId
 
 ### 医疗指标表 (MedicalIndicators)
-- id, name, unit, type, testMethod, description, referenceRange, isDefault
+- id, name, unit, type, valueType, testMethod, description, referenceRange
+- normalMin, normalMax (通用/男性参考范围)
+- normalMinFemale, normalMaxFemale (女性专用参考范围)
+- normalValue (定性指标正常值)
+- isDefault
 
 ### 报告指标数据表 (ReportIndicatorData)
-- id, value, numericValue, referenceRange, isNormal, notes, reportId, indicatorId
+- id, value, numericValue, referenceRange, isNormal, abnormalType, notes
+- reportId, indicatorId
+- 注：系统自动根据家庭成员性别选择参考范围判断是否正常
 
 ## 部署
 

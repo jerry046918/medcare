@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -50,16 +50,16 @@ const Dashboard = () => {
   const isLoading = membersLoading || reportsLoading || indicatorsLoading;
 
   // 获取最近的报告
-  const recentReports = [...reports]
+  const recentReports = useMemo(() => [...reports]
     .sort((a, b) => dayjs(b.reportDate).valueOf() - dayjs(a.reportDate).valueOf())
-    .slice(0, 5);
+    .slice(0, 5), [reports]);
 
   // 获取需要关注的家庭成员（BMI异常等）
-  const membersNeedAttention = familyMembers.filter(member => {
+  const membersNeedAttention = useMemo(() => familyMembers.filter(member => {
     if (!member.bmi) return false;
     const bmi = parseFloat(member.bmi);
     return bmi < 18.5 || bmi >= 28; // 偏瘦或肥胖
-  });
+  }), [familyMembers]);
 
   const handleViewMember = (memberId) => {
     navigate(`/family-members/${memberId}`);
@@ -326,7 +326,7 @@ const Dashboard = () => {
         <Card
           title="健康提醒"
           style={{ marginTop: 16 }}
-          bodyStyle={{ backgroundColor: '#fff2f0' }}
+          styles={{ body: { backgroundColor: '#fff2f0' } }}
         >
           <List
             dataSource={membersNeedAttention}

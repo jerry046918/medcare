@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MedCare is a full-stack family health management system built with React + Node.js + SQLite. It helps families manage health information, medical reports, and health indicators.
+MedCare is a full-stack family health management system built with React + Node.js + SQLite. It helps families manage health information, medical reports, and health indicators. UI is in Chinese (中文).
 
 ## Common Commands
 
@@ -16,31 +16,36 @@ npm run install-all
 # Start both frontend and backend in development mode
 npm run dev
 
-# Start backend only (port 3001)
+# Start backend only (port 3001, uses nodemon)
 npm run server
 
 # Start frontend only (port 3000)
 npm run client
 
-# Initialize/reset database
-npm run init-db
-# Or from server directory:
+# Initialize/reset database (must run from server/)
 cd server && npm run init-db
 ```
 
 ### Production Build
 ```bash
-# Build frontend for production
+# Build frontend for production (output: client/build/)
 npm run build
-# Output goes to client/build/, then copy to server/public/ for serving
+# Then copy client/build/ to server/public/ for serving
 
 # Start production server
 cd server && npm start
 ```
 
+### Testing
+```bash
+# Frontend tests only (client/ uses react-scripts test)
+cd client && npm test
+```
+
 ### Docker
 ```bash
 docker-compose up -d
+# Maps container port 3001 to host port 3000
 ```
 
 ## Architecture
@@ -49,36 +54,43 @@ docker-compose up -d
 - **Express.js** server on port 3001
 - **Sequelize ORM** with **SQLite** database at `server/database/medcare.db`
 - **JWT authentication** via middleware (`middleware/auth.js`)
+- Rate limiting via `middleware/rateLimiter.js`
+- Centralized config in `config/index.js` (reads env vars, provides defaults in dev)
 
-**Key directories:**
-- `models/` - Sequelize models with relationships defined in `models/index.js`
-- `routes/` - Express route handlers for each resource
-- `services/` - Business logic including OCR service
-- `middleware/` - Auth middleware and rate limiter
-- `scripts/` - Database initialization and migration scripts
-- `utils/` - Utility functions
-- `config/` - Configuration files
+**Key files:**
+- `models/index.js` - All Sequelize model imports and relationship definitions
+- `routes/` - Express route handlers, one file per resource
+- `services/ocrService.js` - OCR business logic
+- `scripts/` - Database init (`initDatabase.js`), reset, schema migration (`updateIndicatorSchema.js`), default indicator seeding (`defaultIndicators.js`)
+- `config/index.js` - All env vars and config (jwt, server, db, ocr, upload, rateLimit, fileMagicNumbers)
 
-**Data model relationships:**
-- User → hasMany FamilyMembers
-- FamilyMember → hasMany MedicalReports, Medications, MedicalLogs
-- MedicalReport → hasMany ReportIndicatorData
-- MedicalIndicator → hasMany ReportIndicatorData
+**Data model relationships (defined in `models/index.js`):**
+- User → hasMany FamilyMembers (CASCADE)
+- FamilyMember → hasMany MedicalReports, Medications, MedicalLogs (all CASCADE)
+- MedicalReport → hasMany ReportIndicatorData (CASCADE)
+- MedicalIndicator → hasMany ReportIndicatorData (SET NULL on delete)
+- MedicalLog → belongsTo MedicalReport, Medication (SET NULL on delete) — cross-references between resources
 
 ### Frontend (client/)
 - **React 18** with **Redux Toolkit** for state management
 - **Ant Design** for UI components
-- **React Router** for routing, **ECharts** for charts
+- **React Router v6** for routing, **ECharts** for charts
 - Proxy configured to backend at `http://localhost:3001`
 
-**Key directories:**
-- `src/pages/` - Route-level page components (Auth, Dashboard, FamilyMembers, Reports, Settings)
-- `src/components/` - Reusable components (Layout, OCRReportRecognition, HospitalAutoComplete)
-- `src/services/` - API service modules using axios
-- `src/store/slices/` - Redux slices for each domain (auth, familyMembers, reports, indicators, medications, medicalLogs)
-- `src/utils/` - Utility functions
+**Key patterns:**
+- `src/services/api.js` - Centralized axios instance with request/response interceptors (auto-adds JWT, handles 401 with global `auth:logout` event, formats errors)
+- `src/services/` - One API module per domain, all import from `api.js`
+- `src/store/slices/` - One Redux slice per domain (auth, familyMembers, reports, indicators, medications, medicalLogs)
+- `src/store/index.js` - Redux store setup combining all slices
 
-**Note:** Health indicators are managed within the Settings page (`/settings`), not as a separate route.
+**Route structure (from App.js):**
+- Unauthenticated: `/login`, `/register`
+- If no users exist (first setup): redirects to `/register`
+- Authenticated routes (nested under MainLayout):
+  - `/dashboard` - Main dashboard
+  - `/family-members`, `/family-members/:id`, `/family-members/:id/edit`
+  - `/reports`, `/reports/upload`, `/reports/:id`, `/reports/:id/edit`
+  - `/settings` - Includes health indicator management and OCR settings
 
 ### OCR Service
 Located at `server/services/ocrService.js`. Supports multiple OCR engines:
@@ -121,30 +133,24 @@ Client (`client/.env`):
 REACT_APP_API_URL=/api
 ```
 
-## Database Management
-
-- Database file: `server/database/medcare.db` (SQLite)
-- Initialization: `node server/scripts/initDatabase.js`
-- Reset: `node server/scripts/resetDatabase.js`
-- Schema migration: `node server/scripts/updateIndicatorSchema.js`
-- Default indicators are seeded from `server/scripts/defaultIndicators.js`
-
 ## Authentication Flow
 
 1. On first use, system checks `/api/auth/init-status` for setup status
 2. If no users exist, redirects to registration
-3. JWT tokens are stored in localStorage, verified via `/api/auth/verify`
+3. JWT tokens stored in localStorage, sent as `Bearer` token via axios interceptor
 4. Auth middleware (`middleware/auth.js`) validates JWT on protected routes
+5. 401 responses trigger global `auth:logout` event → Redux clears auth state → redirect to login
 
 ## API Structure
 
 All API routes are prefixed with `/api/`:
 - `/api/auth/*` - Authentication (register, login, verify, init-status)
 - `/api/family-members/*` - Family member CRUD
-- `/api/reports/*` - Medical reports with file uploads (multer)
+- `/api/reports/*` - Medical reports with file uploads (multer, 10MB limit)
 - `/api/indicators/*` - Medical indicator definitions (supports gender-specific ranges)
 - `/api/medications/*` - Medication tracking
-- `/api/medical-logs/*` - Medical event logs
+- `/api/medical-logs/*` - Medical event logs (cross-references reports and medications)
 - `/api/hospitals/*` - Hospital data/autocomplete
 - `/api/ocr/*` - OCR recognition and configuration
 - `/api/config/*` - System configuration
+- `/api/health` - Health check endpoint

@@ -51,7 +51,7 @@ module.exports = (sequelize) => {
     },
     indicatorId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'medical_indicators',
         key: 'id'

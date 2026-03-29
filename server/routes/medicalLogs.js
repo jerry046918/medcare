@@ -1,7 +1,16 @@
 const express = require('express');
 const { MedicalLog, FamilyMember, MedicalReport, Medication } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
+const { sanitizeInput, escapeHtml } = require('../utils/security');
 const router = express.Router();
+
+function sanitizeLogData(data) {
+  const sanitized = { ...data };
+  if (sanitized.title) sanitized.title = escapeHtml(sanitizeInput(sanitized.title, { maxLength: 200 }));
+  if (sanitized.description) sanitized.description = escapeHtml(sanitizeInput(sanitized.description, { maxLength: 2000 }));
+  if (sanitized.hospital) sanitized.hospital = escapeHtml(sanitizeInput(sanitized.hospital, { maxLength: 200 }));
+  return sanitized;
+}
 
 // 获取指定成员的所有医疗日志
 router.get('/member/:memberId', authenticateToken, async (req, res) => {
@@ -104,7 +113,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // 创建手动医疗日志
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { memberId, logType, title, description, hospital, treatmentStartDate, treatmentEndDate } = req.body;
+    const sanitized = sanitizeLogData(req.body);
+    const { memberId, logType, title, description, hospital, treatmentStartDate, treatmentEndDate } = sanitized;
 
     // 验证必填字段
     if (!memberId || !logType || !title) {
@@ -196,7 +206,8 @@ router.post('/', authenticateToken, async (req, res) => {
 // 更新医疗日志
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    const { title, description, hospital, treatmentStartDate, treatmentEndDate } = req.body;
+    const sanitized = sanitizeLogData(req.body);
+    const { title, description, hospital, treatmentStartDate, treatmentEndDate } = sanitized;
 
     const log = await MedicalLog.findOne({
       where: { id: req.params.id },

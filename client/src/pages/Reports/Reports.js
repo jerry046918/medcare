@@ -41,6 +41,7 @@ const Reports = () => {
     dateRange: null,
     hospitalName: ''
   });
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     dispatch(fetchReports());
@@ -67,11 +68,14 @@ const Reports = () => {
   };
 
   const handleDelete = async (id) => {
+    setDeletingId(id);
     try {
       await dispatch(deleteReport(id)).unwrap();
       message.success('删除成功');
     } catch (error) {
       // 错误已在Redux中处理
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -196,7 +200,7 @@ const Reports = () => {
               danger
               icon={<DeleteOutlined />}
               size="small"
-              loading={isDeleting}
+              loading={deletingId === record.id}
             >
               删除
             </Button>

@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');  // 同步方法
+const crypto = require('crypto');
 const axios = require('axios');
 const FormData = require('form-data');
 // OCR 引擎类型
@@ -60,7 +61,7 @@ class PaddleOCREngine extends BaseOCREngine {
 
   async recognize(imageBuffer, options = {}) {
     return new Promise((resolve, reject) => {
-      const tempImagePath = path.join(__dirname, '../uploads/ocr/temp_${Date.now()}.png');
+      const tempImagePath = path.join(__dirname, `../uploads/ocr/temp_${Date.now()}_${crypto.randomBytes(8).toString('hex')}.png`);
       
       // 临时保存图片
       fs.writeFile(tempImagePath, imageBuffer)

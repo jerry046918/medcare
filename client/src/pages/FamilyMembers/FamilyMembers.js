@@ -44,6 +44,7 @@ const FamilyMembers = () => {
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -73,11 +74,14 @@ const FamilyMembers = () => {
   };
 
   const handleDelete = async (id) => {
+    setDeletingId(id);
     try {
       await dispatch(deleteFamilyMember(id)).unwrap();
       message.success('删除成功');
     } catch (error) {
       // 错误已在Redux中处理
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -214,7 +218,7 @@ const FamilyMembers = () => {
               danger
               icon={<DeleteOutlined />}
               size="small"
-              loading={isDeleting}
+              loading={deletingId === record.id}
             >
               删除
             </Button>

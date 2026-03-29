@@ -11,6 +11,39 @@ const { Op } = require('sequelize');
 const router = express.Router();
 
 /**
+ * 脱敏处理：隐藏敏感密钥，只显示最后4位
+ */
+function maskSecret(value) {
+  if (!value || typeof value !== 'string') return '';
+  if (value.length <= 4) return '****';
+  return '****' + value.slice(-4);
+}
+
+/**
+ * 对 OCR 配置中的敏感字段进行脱敏
+ */
+function maskOcrSecrets(config) {
+  const masked = { ...config };
+  // OpenAI
+  if (masked.openai_vision?.apiKey) {
+    masked.openai_vision = { ...masked.openai_vision, apiKey: maskSecret(masked.openai_vision.apiKey) };
+  }
+  // 百度 OCR
+  if (masked.baidu_ocr) {
+    masked.baidu_ocr = { ...masked.baidu_ocr };
+    if (masked.baidu_ocr.apiKey) masked.baidu_ocr.apiKey = maskSecret(masked.baidu_ocr.apiKey);
+    if (masked.baidu_ocr.secretKey) masked.baidu_ocr.secretKey = maskSecret(masked.baidu_ocr.secretKey);
+  }
+  // 腾讯 OCR
+  if (masked.tencent_ocr) {
+    masked.tencent_ocr = { ...masked.tencent_ocr };
+    if (masked.tencent_ocr.secretId) masked.tencent_ocr.secretId = maskSecret(masked.tencent_ocr.secretId);
+    if (masked.tencent_ocr.secretKey) masked.tencent_ocr.secretKey = maskSecret(masked.tencent_ocr.secretKey);
+  }
+  return masked;
+}
+
+/**
  * GET /api/config
  * 获取所有公开配置
  */
@@ -57,15 +90,8 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/:category', authenticateToken, async (req, res) => {
   try {
     const { category } = req.params;
-    const { includePrivate } = req.query;
 
     const whereClause = { category };
-    
-    // 只有管理员可以获取私有配置
-    // 这里简化处理，实际应用中应添加角色检查
-    if (includePrivate !== 'true') {
-      whereClause.isPublic = true;
-    }
 
     const configs = await SystemConfig.findAll({
       where: whereClause,
@@ -407,7 +433,7 @@ router.get('/ocr/full', authenticateToken, async (req, res) => {
 
     res.json({
       success: true,
-      data: result
+      data: maskOcrSecrets(result)
     });
 
   } catch (error) {
@@ -415,7 +441,7 @@ router.get('/ocr/full', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取 OCR 配置失败',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? undefined : error.message
     });
   }
 });

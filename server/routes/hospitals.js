@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const hospitalsData = require('../data/hospitals.json');
+const { authenticateToken } = require('../middleware/auth');
 
 // 搜索医院
-router.get('/search', (req, res) => {
+router.get('/search', authenticateToken, (req, res) => {
   try {
     const { keyword, province, limit = 20 } = req.query;
     
@@ -27,7 +28,8 @@ router.get('/search', (req, res) => {
     }
     
     // 限制返回数量
-    results = results.slice(0, parseInt(limit));
+    const maxLimit = Math.min(parseInt(limit, 10) || 20, 100);
+    results = results.slice(0, maxLimit);
     
     res.json({
       success: true,
@@ -45,7 +47,7 @@ router.get('/search', (req, res) => {
 });
 
 // 获取所有省份
-router.get('/provinces', (req, res) => {
+router.get('/provinces', authenticateToken, (req, res) => {
   try {
     const provinces = [...new Set(hospitalsData.hospitals.map(h => h.province))];
     res.json({
@@ -63,7 +65,7 @@ router.get('/provinces', (req, res) => {
 });
 
 // 获取所有医院（用于下拉列表）
-router.get('/all', (req, res) => {
+router.get('/all', authenticateToken, (req, res) => {
   try {
     res.json({
       success: true,

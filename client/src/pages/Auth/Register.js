@@ -69,7 +69,7 @@ const Register = () => {
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
           borderRadius: '12px'
         }}
-        bodyStyle={{ padding: '40px' }}
+        styles={{ body: { padding: '40px' } }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <Space direction="vertical" size="small">

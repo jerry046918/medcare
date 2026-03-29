@@ -1,7 +1,19 @@
 const express = require('express');
 const { MedicalIndicator, ReportIndicatorData } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
+const { sanitizeInput, escapeHtml } = require('../utils/security');
 const router = express.Router();
+
+function sanitizeIndicatorData(data) {
+  const sanitized = { ...data };
+  if (sanitized.name) sanitized.name = escapeHtml(sanitizeInput(sanitized.name, { maxLength: 100 }));
+  if (sanitized.unit) sanitized.unit = escapeHtml(sanitizeInput(sanitized.unit, { maxLength: 50 }));
+  if (sanitized.type) sanitized.type = escapeHtml(sanitizeInput(sanitized.type, { maxLength: 50 }));
+  if (sanitized.testMethod) sanitized.testMethod = escapeHtml(sanitizeInput(sanitized.testMethod, { maxLength: 100 }));
+  if (sanitized.referenceRange) sanitized.referenceRange = escapeHtml(sanitizeInput(sanitized.referenceRange, { maxLength: 200 }));
+  if (sanitized.description) sanitized.description = escapeHtml(sanitizeInput(sanitized.description, { maxLength: 500 }));
+  return sanitized;
+}
 
 // 获取所有指标
 router.get('/', authenticateToken, async (req, res) => {
@@ -53,6 +65,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // 创建指标
 router.post('/', authenticateToken, async (req, res) => {
   try {
+    const sanitized = sanitizeIndicatorData(req.body);
     const {
       name,
       unit,
@@ -67,7 +80,7 @@ router.post('/', authenticateToken, async (req, res) => {
       referenceRange,
       description,
       isDefault
-    } = req.body;
+    } = sanitized;
 
     // 验证必填字段
     if (!name || !type || !valueType) {
@@ -82,6 +95,13 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: '数值型指标至少需要设置最小值或最大值其中之一'
+      });
+    }
+
+    if (normalMin !== undefined && normalMax !== undefined && Number(normalMin) >= Number(normalMax)) {
+      return res.status(400).json({
+        success: false,
+        message: '最小正常值必须小于最大正常值'
       });
     }
 
@@ -127,6 +147,7 @@ router.post('/', authenticateToken, async (req, res) => {
 // 更新指标
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
+    const sanitized = sanitizeIndicatorData(req.body);
     const {
       name,
       unit,
@@ -141,7 +162,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       referenceRange,
       description,
       isDefault
-    } = req.body;
+    } = sanitized;
 
     const indicator = await MedicalIndicator.findByPk(req.params.id);
 
@@ -167,6 +188,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
           message: '定性型指标必须设置正常值'
         });
       }
+    }
+
+    if (normalMin !== undefined && normalMax !== undefined && Number(normalMin) >= Number(normalMax)) {
+      return res.status(400).json({
+        success: false,
+        message: '最小正常值必须小于最大正常值'
+      });
     }
 
     await indicator.update({

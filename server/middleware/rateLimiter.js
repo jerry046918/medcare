@@ -20,10 +20,8 @@ const apiLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // 使用 IP + 用户代理作为键（提高安全性）
-  keyGenerator: (req) => {
-    return `${req.ip}-${req.get('User-Agent') || 'unknown'}`;
-  },
+  // 使用 IP 作为键
+  keyGenerator: (req) => req.ip || 'unknown',
   handler: (req, res) => {
     console.warn(`[RateLimit] IP ${req.ip} 触发限流: ${req.path}`);
     res.status(429).json({

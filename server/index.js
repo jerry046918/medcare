@@ -15,6 +15,7 @@ const medicalLogRoutes = require('./routes/medicalLogs');
 const hospitalRoutes = require('./routes/hospitals');
 const ocrRoutes = require('./routes/ocr');
 const configRoutes = require('./routes/config');
+const fileRoutes = require('./routes/files');
 
 // 检查必需的环境变量
 checkRequiredEnvVars();
@@ -23,7 +24,12 @@ const app = express();
 const PORT = serverConfig.port;
 
 // 中间件
-app.use(cors());
+app.use(cors({
+  origin: serverConfig.nodeEnv === 'production'
+    ? (process.env.CORS_ORIGIN || false)
+    : 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -40,8 +46,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// 静态文件服务（用于PDF文件）
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// 上传文件需要认证后才能访问（替代原来的公开静态文件服务）
+app.use('/api/files', fileRoutes);
 
 // API 限流（应用于所有 API 路由）
 app.use('/api/', apiLimiter);

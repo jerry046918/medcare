@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout, Spin, message } from 'antd';
 import { useDispatch, useSelector } from 'react-redux';
 import { checkAuthStatus, handleAuthExpired, clearLogoutReason } from './store/slices/authSlice';
+import ErrorBoundary from './components/ErrorBoundary';
 import MainLayout from './components/Layout/MainLayout';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
@@ -30,13 +31,8 @@ function App() {
   // 监听来自 API 拦截器的认证过期事件
   useEffect(() => {
     const handleAuthLogout = (event) => {
-      console.log('[App] 收到认证过期事件:', event.detail);
+      if (process.env.NODE_ENV !== 'production') console.log('[App] 收到认证过期事件:', event.detail);
       dispatch(handleAuthExpired());
-
-      // 显示提示消息
-      if (event.detail?.reason === 'token_expired') {
-        message.warning('登录已过期，请重新登录');
-      }
     };
 
     window.addEventListener('auth:logout', handleAuthLogout);
@@ -87,6 +83,7 @@ function App() {
 
   // 已认证用户的主应用
   return (
+    <ErrorBoundary>
     <Routes>
       <Route path="/" element={<MainLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
@@ -102,6 +99,7 @@ function App() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
+    </ErrorBoundary>
   );
 }
 

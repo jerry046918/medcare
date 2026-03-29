@@ -11,6 +11,8 @@ const ErrorTypes = {
   UNKNOWN: 'UNKNOWN_ERROR'
 };
 
+let isLoggingOut = false;
+
 // 错误消息映射
 const ErrorMessages = {
   [ErrorTypes.NETWORK]: '无法连接到服务器，请检查网络连接或确认后端服务已启动 (端口 3001)',
@@ -131,11 +133,15 @@ api.interceptors.response.use(
 
     // 如果是 401 错误，清除 token
     if (formattedError.type === ErrorTypes.AUTH) {
+      const hadToken = !!localStorage.getItem('token');
       localStorage.removeItem('token');
-      // 触发全局登出事件（由 App 组件监听）
-      window.dispatchEvent(new CustomEvent('auth:logout', {
-        detail: { reason: 'token_expired' }
-      }));
+      if (hadToken && !isLoggingOut) {
+        isLoggingOut = true;
+        window.dispatchEvent(new CustomEvent('auth:logout', {
+          detail: { reason: 'token_expired' }
+        }));
+        setTimeout(() => { isLoggingOut = false; }, 1000);
+      }
     }
 
     // 限流错误日志

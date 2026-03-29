@@ -155,8 +155,10 @@ const ReportEdit = () => {
         item.value !== null
       );
       
-      console.log('原始指标数据:', indicatorData);
-      console.log('过滤后指标数据:', filteredIndicatorData);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('原始指标数据:', indicatorData);
+        console.log('过滤后指标数据:', filteredIndicatorData);
+      }
       
       const reportData = {
         ...values,
@@ -165,7 +167,7 @@ const ReportEdit = () => {
         pdfFile: fileList.length > 0 ? fileList[0] : null
       };
       
-      console.log('提交的报告数据:', reportData);
+      if (process.env.NODE_ENV !== 'production') console.log('提交的报告数据:', reportData);
       
       await dispatch(updateReport({ id, data: reportData })).unwrap();
       message.success('报告更新成功');
@@ -193,7 +195,7 @@ const ReportEdit = () => {
   };
 
   const handleIndicatorChange = (id, field, value) => {
-    setIndicatorData(indicatorData.map(item => {
+    setIndicatorData(prevData => prevData.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
         

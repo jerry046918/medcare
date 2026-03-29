@@ -21,6 +21,11 @@ const authAPI = {
     return api.get('/auth/init-status');
   },
 
+  // 修改密码
+  changePassword: (data) => {
+    return api.post('/auth/change-password', data);
+  },
+
   // 登出（客户端处理）
   logout: () => {
     localStorage.removeItem('token');

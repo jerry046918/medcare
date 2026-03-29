@@ -75,18 +75,20 @@ const ReportUpload = () => {
   const handleSubmit = async (values) => {
     // 防止重复提交
     if (isSubmitting) {
-      console.log('[ReportUpload] 已在提交中，跳过重复请求');
+      if (process.env.NODE_ENV !== 'production') console.log('[ReportUpload] 已在提交中，跳过重复请求');
       return;
     }
     
     setIsSubmitting(true);
     try {
-      console.log('=== 前端创建报告调试信息 ===');
-      console.log('表单数据:', values);
-      console.log('可用指标列表:', indicators);
-      console.log('可用指标数量:', indicators.length);
-      console.log('原始指标数据:', indicatorData);
-      console.log('指标数据长度:', indicatorData.length);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('=== 前端创建报告调试信息 ===');
+        console.log('表单数据:', values);
+        console.log('可用指标列表:', indicators);
+        console.log('可用指标数量:', indicators.length);
+        console.log('原始指标数据:', indicatorData);
+        console.log('指标数据长度:', indicatorData.length);
+      }
       
       const filteredIndicatorData = indicatorData.filter(item => 
         item.indicatorId !== null && 
@@ -101,8 +103,10 @@ const ReportUpload = () => {
         message.warning('指标数据未完整填写，所有指标均未选择或未填写数值，将不包含指标数据');
       }
       
-      console.log('过滤后指标数据:', filteredIndicatorData);
-      console.log('过滤后指标数据长度:', filteredIndicatorData.length);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('过滤后指标数据:', filteredIndicatorData);
+        console.log('过滤后指标数据长度:', filteredIndicatorData.length);
+      }
       
       const reportData = {
         ...values,
@@ -111,8 +115,10 @@ const ReportUpload = () => {
         pdfFile: fileList.length > 0 ? fileList[0] : null
       };
       
-      console.log('最终提交的报告数据:', JSON.stringify(reportData, null, 2));
-      console.log('=== 调试信息结束 ===');
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('最终提交的报告数据:', JSON.stringify(reportData, null, 2));
+        console.log('=== 调试信息结束 ===');
+      }
       await dispatch(createReport(reportData)).unwrap();
       message.success('报告上传成功');
       // 如果是从成员详情页跳转来的，返回成员详情页
@@ -125,7 +131,7 @@ const ReportUpload = () => {
       console.error('创建报告失败:', error);
       console.error('错误详情:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
       // 显示错误消息给用户
-      let errorMsg = '创建报告失败，请稀后重试';
+      let errorMsg = '创建报告失败，请稍后重试';
       if (typeof error === 'string') {
         errorMsg = error;
       } else if (error?.message) {
@@ -134,6 +140,7 @@ const ReportUpload = () => {
         errorMsg = error.response.data.message;
       }
       message.error(errorMsg);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -283,11 +290,13 @@ const ReportUpload = () => {
   }, [indicators]);
 
   const handleIndicatorChange = (id, field, value) => {
-    console.log('=== handleIndicatorChange 调试 ===');
-    console.log('id:', id, 'field:', field, 'value:', value);
-    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('=== handleIndicatorChange 调试 ===');
+      console.log('id:', id, 'field:', field, 'value:', value);
+    }
+
     setIndicatorData(prevData => {
-      console.log('当前indicatorData:', prevData);
+      if (process.env.NODE_ENV !== 'production') console.log('当前indicatorData:', prevData);
       
       const newData = prevData.map(item => {
         if (item.id === id) {
@@ -307,8 +316,10 @@ const ReportUpload = () => {
         return item;
       });
       
-      console.log('更新后的indicatorData:', newData);
-      console.log('=== 调试结束 ===');
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('更新后的indicatorData:', newData);
+        console.log('=== 调试结束 ===');
+      }
       
       return newData;
     });

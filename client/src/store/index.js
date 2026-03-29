@@ -14,12 +14,6 @@ export const store = configureStore({
     medications: medicationSlice,
     medicalLogs: medicalLogSlice,
   },
-  middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware({
-      serializableCheck: {
-        ignoredActions: ['persist/PERSIST'],
-      },
-    }),
 });
 
 /** @typedef {ReturnType<typeof store.getState>} RootState */

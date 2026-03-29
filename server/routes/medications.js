@@ -1,7 +1,17 @@
 const express = require('express');
 const { Medication, FamilyMember, MedicalLog } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
+const { sanitizeInput, escapeHtml } = require('../utils/security');
 const router = express.Router();
+
+function sanitizeMedicationData(data) {
+  const sanitized = { ...data };
+  if (sanitized.name) sanitized.name = escapeHtml(sanitizeInput(sanitized.name, { maxLength: 100 }));
+  if (sanitized.specification) sanitized.specification = escapeHtml(sanitizeInput(sanitized.specification, { maxLength: 100 }));
+  if (sanitized.frequency) sanitized.frequency = escapeHtml(sanitizeInput(sanitized.frequency, { maxLength: 50 }));
+  if (sanitized.notes) sanitized.notes = escapeHtml(sanitizeInput(sanitized.notes, { maxLength: 500 }));
+  return sanitized;
+}
 
 // 获取指定成员的所有用药记录
 router.get('/member/:memberId', authenticateToken, async (req, res) => {
@@ -76,7 +86,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // 创建用药记录
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { memberId, name, specification, frequency, notes } = req.body;
+    const sanitized = sanitizeMedicationData(req.body);
+    const { memberId, name, specification, frequency, notes } = sanitized;
 
     // 验证必填字段
     if (!memberId || !name) {
@@ -138,7 +149,8 @@ router.post('/', authenticateToken, async (req, res) => {
 // 更新用药记录
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    const { name, specification, frequency, notes, isActive } = req.body;
+    const sanitized = sanitizeMedicationData(req.body);
+    const { name, specification, frequency, notes, isActive } = sanitized;
 
     const medication = await Medication.findOne({
       where: { id: req.params.id },

@@ -16,7 +16,7 @@ module.exports = (sequelize) => {
       }
     },
     gender: {
-      type: DataTypes.ENUM('男', '女'),
+      type: DataTypes.ENUM('男', '女', '其他'),
       allowNull: false
     },
     relationship: {
@@ -98,7 +98,7 @@ module.exports = (sequelize) => {
   FamilyMember.prototype.getBMI = function() {
     if (!this.weight || !this.height) return null;
     const heightInMeters = this.height / 100;
-    return (this.weight / (heightInMeters * heightInMeters)).toFixed(2);
+    return parseFloat((this.weight / (heightInMeters * heightInMeters)).toFixed(2));
   };
 
   return FamilyMember;

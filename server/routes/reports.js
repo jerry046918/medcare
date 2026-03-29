@@ -343,71 +343,77 @@ router.put('/:id', authenticateToken, async (req, res) => {
       notes
     });
 
-    await report.update({
-      reportDate: reportDate || report.reportDate,
-      hospitalName: hospitalName !== undefined ? sanitizedData.hospitalName : report.hospitalName,
-      doctorName: doctorName !== undefined ? sanitizedData.doctorName : report.doctorName,
-      notes: notes !== undefined ? sanitizedData.notes : report.notes
-    });
+    // 使用事务保护更新操作（防止 destroy + bulkCreate 中间失败导致数据丢失）
+    const transactionResult = await withTransaction(async (transaction) => {
+      await report.update({
+        reportDate: reportDate || report.reportDate,
+        hospitalName: hospitalName !== undefined ? sanitizedData.hospitalName : report.hospitalName,
+        doctorName: doctorName !== undefined ? sanitizedData.doctorName : report.doctorName,
+        notes: notes !== undefined ? sanitizedData.notes : report.notes
+      }, { transaction });
 
-    // 更新指标数据
-    console.log('接收到的指标数据:', indicatorData);
-    if (indicatorData && Array.isArray(indicatorData)) {
-      console.log('指标数据是数组，长度:', indicatorData.length);
-      // 删除现有的指标数据
-      const deletedCount = await ReportIndicatorData.destroy({
-        where: { reportId: reportId }
-      });
-      console.log('删除了', deletedCount, '条现有指标数据');
+      // 更新指标数据
+      if (indicatorData && Array.isArray(indicatorData)) {
+        // 删除现有的指标数据
+        await ReportIndicatorData.destroy({
+          where: { reportId: reportId },
+          transaction
+        });
 
-      // 创建新的指标数据
-      if (indicatorData.length > 0) {
-        const indicatorDataToCreate = indicatorData.map(item => ({
-          reportId: reportId,
-          indicatorId: validateId(item.indicatorId),
-          value: sanitizeInput(String(item.value), { maxLength: 100, stripTags: false }),
-          referenceRange: item.referenceRange ? sanitizeInput(item.referenceRange, { maxLength: 50 }) : null,
-          isNormal: item.isNormal !== undefined ? Boolean(item.isNormal) : true,
-          abnormalType: sanitizeInput(item.abnormalType || 'normal', { maxLength: 20 }),
-          notes: item.notes ? sanitizeInput(item.notes, { maxLength: 500 }) : null
-        })).filter(item => item.indicatorId); // 过滤无效 ID
+        // 创建新的指标数据
+        if (indicatorData.length > 0) {
+          const indicatorDataToCreate = indicatorData.map(item => ({
+            reportId: reportId,
+            indicatorId: validateId(item.indicatorId),
+            value: sanitizeInput(String(item.value), { maxLength: 100, stripTags: false }),
+            referenceRange: item.referenceRange ? sanitizeInput(item.referenceRange, { maxLength: 50 }) : null,
+            isNormal: item.isNormal !== undefined ? Boolean(item.isNormal) : true,
+            abnormalType: sanitizeInput(item.abnormalType || 'normal', { maxLength: 20 }),
+            notes: item.notes ? sanitizeInput(item.notes, { maxLength: 500 }) : null
+          })).filter(item => item.indicatorId);
 
-        console.log('准备创建的指标数据:', indicatorDataToCreate);
-        const createdIndicators = await ReportIndicatorData.bulkCreate(indicatorDataToCreate);
-        console.log('成功创建了', createdIndicators.length, '条指标数据');
-      }
-    } else {
-      console.log('没有接收到有效的指标数据');
-    }
-
-    // 获取更新后的完整报告数据
-    const updatedReport = await MedicalReport.findOne({
-      where: { id: report.id },
-      include: [
-        {
-          model: FamilyMember,
-          as: 'familyMember',
-          attributes: ['id', 'name', 'gender']
-        },
-        {
-          model: ReportIndicatorData,
-          as: 'indicatorData',
-          include: [{
-            model: MedicalIndicator,
-            as: 'indicator'
-          }]
+          await ReportIndicatorData.bulkCreate(indicatorDataToCreate, { transaction });
         }
-      ]
+      }
+
+      // 获取更新后的完整报告数据
+      const updatedReport = await MedicalReport.findOne({
+        where: { id: report.id },
+        include: [
+          {
+            model: FamilyMember,
+            as: 'familyMember',
+            attributes: ['id', 'name', 'gender']
+          },
+          {
+            model: ReportIndicatorData,
+            as: 'indicatorData',
+            include: [{
+              model: MedicalIndicator,
+              as: 'indicator'
+            }]
+          }
+        ],
+        transaction
+      });
+
+      const updatedReportData = updatedReport.toJSON();
+      updatedReportData.familyMemberId = updatedReportData.memberId;
+      return updatedReportData;
     });
 
-    // 添加 familyMemberId 字段以兼容前端
-    const updatedReportData = updatedReport.toJSON();
-    updatedReportData.familyMemberId = updatedReportData.memberId;
+    if (!transactionResult.success) {
+      console.error('更新报告失败:', transactionResult.error);
+      return res.status(500).json({
+        success: false,
+        message: '更新报告失败'
+      });
+    }
 
     res.json({
       success: true,
       message: '报告更新成功',
-      data: updatedReportData
+      data: transactionResult.result
     });
   } catch (error) {
     console.error('更新报告失败:', error);

@@ -109,3 +109,4 @@ Thumbs.db
 
 # Claude Code memory
 .claude/
+.superpowers/

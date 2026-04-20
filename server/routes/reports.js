@@ -2,6 +2,9 @@ const express = require('express');
 const { MedicalReport, FamilyMember, ReportIndicatorData, MedicalIndicator, MedicalLog, sequelize } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../utils/security');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
 const router = express.Router();
 
 /**
@@ -42,6 +45,28 @@ async function withTransaction(callback) {
     return { success: false, error };
   }
 }
+
+// Report file upload configuration
+const reportStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/reports');
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.pdf'];
+    if (!safeExts.includes(ext)) {
+      return cb(new Error('不支持的文件类型'));
+    }
+    const safeName = `report-${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+    cb(null, safeName);
+  }
+});
+
+const reportUpload = multer({
+  storage: reportStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
 
 // 获取所有报告
 router.get('/', authenticateToken, async (req, res) => {
@@ -143,8 +168,13 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // 创建报告
-router.post('/', authenticateToken, async (req, res) => {
-  const { familyMemberId, reportDate, hospitalName, doctorName, notes, indicatorData } = req.body;
+router.post('/', authenticateToken, reportUpload.single('file'), async (req, res) => {
+  const { familyMemberId, reportDate, hospitalName, doctorName, notes } = req.body;
+  const indicatorData = req.body.indicatorData
+    ? (typeof req.body.indicatorData === 'string'
+      ? JSON.parse(req.body.indicatorData)
+      : req.body.indicatorData)
+    : [];
 
   // 验证必填字段
   const validFamilyMemberId = validateId(familyMemberId);
@@ -198,7 +228,9 @@ router.post('/', authenticateToken, async (req, res) => {
       reportDate,
       hospitalName: sanitizedData.hospitalName,
       doctorName: sanitizedData.doctorName,
-      notes: sanitizedData.notes
+      notes: sanitizedData.notes,
+      filePath: req.file ? `uploads/reports/${req.file.filename}` : null,
+      fileName: req.file ? req.file.originalname : null
     }, { transaction });
 
     console.log('[Reports API] 报告创建成功, ID:', report.id);
@@ -299,7 +331,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // 更新报告
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, reportUpload.single('file'), async (req, res) => {
   try {
     // 验证 ID
     const reportId = validateId(req.params.id);
@@ -310,7 +342,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    const { reportDate, hospitalName, doctorName, notes, indicatorData } = req.body;
+    const { reportDate, hospitalName, doctorName, notes } = req.body;
+    const indicatorData = req.body.indicatorData
+      ? (typeof req.body.indicatorData === 'string'
+        ? JSON.parse(req.body.indicatorData)
+        : req.body.indicatorData)
+      : null;
 
     // 验证日期（如果提供）
     if (reportDate && !validateDate(reportDate)) {
@@ -345,12 +382,28 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // 使用事务保护更新操作（防止 destroy + bulkCreate 中间失败导致数据丢失）
     const transactionResult = await withTransaction(async (transaction) => {
-      await report.update({
+      const oldFilePath = report.filePath;
+
+      const updateFields = {
         reportDate: reportDate || report.reportDate,
         hospitalName: hospitalName !== undefined ? sanitizedData.hospitalName : report.hospitalName,
         doctorName: doctorName !== undefined ? sanitizedData.doctorName : report.doctorName,
         notes: notes !== undefined ? sanitizedData.notes : report.notes
-      }, { transaction });
+      };
+
+      if (req.file) {
+        updateFields.filePath = `uploads/reports/${req.file.filename}`;
+        updateFields.fileName = req.file.originalname;
+      }
+
+      await report.update(updateFields, { transaction });
+
+      if (req.file && oldFilePath) {
+        const fullPath = path.join(__dirname, '..', oldFilePath);
+        try { await fs.unlink(fullPath); } catch (e) {
+          console.warn('[Reports] Failed to delete old file:', e.message);
+        }
+      }
 
       // 更新指标数据
       if (indicatorData && Array.isArray(indicatorData)) {
@@ -456,6 +509,14 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     await ReportIndicatorData.destroy({
       where: { reportId: reportId }
     });
+
+    // 删除关联文件
+    if (report.filePath) {
+      const filePath = path.join(__dirname, '..', report.filePath);
+      try { await fs.unlink(filePath); } catch (e) {
+        console.warn('[Reports] Failed to delete report file:', e.message);
+      }
+    }
 
     // 删除报告
     await report.destroy();

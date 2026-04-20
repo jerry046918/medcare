@@ -24,7 +24,10 @@ import {
   FileTextOutlined,
   UserOutlined,
   CalendarOutlined,
-  MedicineBoxOutlined
+  MedicineBoxOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  PieChartOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { fetchReportDetail } from '../../store/slices/reportSlice';
@@ -191,7 +194,7 @@ const ReportDetail = () => {
   ];
 
   return (
-    <div>
+    <div className="page-fade-in">
       <Card
         title={
           <Space>
@@ -276,32 +279,35 @@ const ReportDetail = () => {
           <Col span={6}>
             <Row gutter={[0, 16]}>
               <Col span={24}>
-                <Card size="small">
+                <Card size="small" className="stat-card" style={{ borderLeft: '3px solid #3b82f6' }}>
                   <Statistic
                     title="总指标数"
                     value={indicatorData.length}
                     suffix="项"
-                    valueStyle={{ color: '#1890ff' }}
+                    prefix={<PieChartOutlined style={{ fontSize: 18, color: '#3b82f6', background: 'rgba(59,130,246,0.1)', padding: 6, borderRadius: 6 }} />}
+                    valueStyle={{ color: '#3b82f6', fontSize: 22 }}
                   />
                 </Card>
               </Col>
               <Col span={24}>
-                <Card size="small">
+                <Card size="small" className="stat-card" style={{ borderLeft: '3px solid #22c55e' }}>
                   <Statistic
                     title="正常指标"
                     value={normalCount}
                     suffix="项"
-                    valueStyle={{ color: '#52c41a' }}
+                    prefix={<CheckCircleOutlined style={{ fontSize: 18, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: 6, borderRadius: 6 }} />}
+                    valueStyle={{ color: '#22c55e', fontSize: 22 }}
                   />
                 </Card>
               </Col>
               <Col span={24}>
-                <Card size="small">
+                <Card size="small" className="stat-card" style={{ borderLeft: `3px solid ${abnormalCount > 0 ? '#ef4444' : '#22c55e'}` }}>
                   <Statistic
                     title="异常指标"
                     value={abnormalCount}
                     suffix="项"
-                    valueStyle={{ color: abnormalCount > 0 ? '#ff4d4f' : '#52c41a' }}
+                    prefix={<CloseCircleOutlined style={{ fontSize: 18, color: abnormalCount > 0 ? '#ef4444' : '#22c55e', background: abnormalCount > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', padding: 6, borderRadius: 6 }} />}
+                    valueStyle={{ color: abnormalCount > 0 ? '#ef4444' : '#22c55e', fontSize: 22 }}
                   />
                 </Card>
               </Col>
@@ -311,9 +317,14 @@ const ReportDetail = () => {
 
         {/* 指标数据 */}
         <Card
-          title="指标数据"
+          title={
+            <Space>
+              <MedicineBoxOutlined style={{ color: '#3b82f6' }} />
+              <span>指标数据</span>
+            </Space>
+          }
           size="small"
-          style={{ marginTop: 16 }}
+          style={{ marginTop: 24 }}
         >
           {indicatorData.length === 0 ? (
             <Empty
@@ -330,12 +341,12 @@ const ReportDetail = () => {
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 项指标`
               }}
-              rowClassName={(record) => 
-                record.isNormal ? '' : ''
+              rowClassName={(record) =>
+                !record.isNormal && record.isNormal !== null ? 'row-abnormal' : ''
               }
               onRow={(record) => ({
                 style: {
-                  backgroundColor: record.isNormal ? '' : '#fff2f0'
+                  backgroundColor: (!record.isNormal && record.isNormal !== null) ? '#fff1f0' : undefined
                 }
               })}
             />

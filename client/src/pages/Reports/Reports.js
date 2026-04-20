@@ -12,7 +12,8 @@ import {
   Input,
   message,
   Popconfirm,
-  Empty
+  Empty,
+  Tooltip
 } from 'antd';
 import {
   PlusOutlined,
@@ -21,7 +22,8 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   SearchOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  UploadOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { fetchReports, deleteReport, clearError } from '../../store/slices/reportSlice';
@@ -80,11 +82,10 @@ const Reports = () => {
   };
 
   const handleDownload = (report) => {
-    if (report.pdfPath) {
-      // 这里应该实现PDF下载逻辑
+    if (report.filePath) {
       message.info('PDF下载功能开发中');
     } else {
-      message.warning('该报告没有PDF文件');
+      message.warning('该报告没有附件文件');
     }
   };
 
@@ -150,9 +151,9 @@ const Reports = () => {
       )
     },
     {
-      title: 'PDF文件',
-      dataIndex: 'pdfPath',
-      key: 'pdfPath',
+      title: '附件',
+      dataIndex: 'filePath',
+      key: 'filePath',
       render: (path) => (
         <Tag color={path ? 'blue' : 'default'}>
           {path ? '已上传' : '无文件'}
@@ -162,32 +163,32 @@ const Reports = () => {
     {
       title: '操作',
       key: 'action',
-      width: 250,
+      width: 180,
       render: (_, record) => (
-        <Space>
-          <Button
-            type="primary"
-            icon={<EyeOutlined />}
-            size="small"
-            onClick={() => handleView(record.id)}
-          >
-            查看
-          </Button>
-          <Button
-            icon={<EditOutlined />}
-            size="small"
-            onClick={() => handleEdit(record.id)}
-          >
-            编辑
-          </Button>
-          {record.pdfPath && (
+        <Space size={4}>
+          <Tooltip title="查看详情">
             <Button
-              icon={<DownloadOutlined />}
+              type="primary"
+              icon={<EyeOutlined />}
               size="small"
-              onClick={() => handleDownload(record)}
-            >
-              下载
-            </Button>
+              onClick={() => handleView(record.id)}
+            />
+          </Tooltip>
+          <Tooltip title="编辑报告">
+            <Button
+              icon={<EditOutlined />}
+              size="small"
+              onClick={() => handleEdit(record.id)}
+            />
+          </Tooltip>
+          {record.filePath && (
+            <Tooltip title="下载附件">
+              <Button
+                icon={<DownloadOutlined />}
+                size="small"
+                onClick={() => handleDownload(record)}
+              />
+            </Tooltip>
           )}
           <Popconfirm
             title="确定要删除这份报告吗？"
@@ -196,14 +197,14 @@ const Reports = () => {
             okText="确定"
             cancelText="取消"
           >
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              size="small"
-              loading={deletingId === record.id}
-            >
-              删除
-            </Button>
+            <Tooltip title="删除报告">
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                size="small"
+                loading={deletingId === record.id}
+              />
+            </Tooltip>
           </Popconfirm>
         </Space>
       )
@@ -211,13 +212,13 @@ const Reports = () => {
   ];
 
   return (
-    <div>
+    <div className="page-fade-in">
       <Card
         title="医疗报告管理"
         extra={
           <Button
             type="primary"
-            icon={<PlusOutlined />}
+            icon={<UploadOutlined />}
             onClick={handleAdd}
           >
             上传报告
@@ -225,11 +226,17 @@ const Reports = () => {
         }
       >
         {/* 筛选器 */}
-        <div style={{ marginBottom: 16 }}>
-          <Space wrap>
+        <div style={{
+          marginBottom: 16,
+          padding: '12px 16px',
+          background: '#f8fafc',
+          borderRadius: 8,
+          border: '1px solid #e2e8f0'
+        }}>
+          <Space wrap size={12}>
             <Select
               placeholder="选择家庭成员"
-              style={{ width: 150 }}
+              style={{ width: 160 }}
               allowClear
               value={filters.familyMemberId}
               onChange={(value) => setFilters(prev => ({ ...prev, familyMemberId: value }))}
@@ -240,13 +247,13 @@ const Reports = () => {
                 </Option>
               ))}
             </Select>
-            
+
             <RangePicker
               placeholder={['开始日期', '结束日期']}
               value={filters.dateRange}
               onChange={(dates) => setFilters(prev => ({ ...prev, dateRange: dates }))}
             />
-            
+
             <Input
               placeholder="搜索医院名称"
               prefix={<SearchOutlined />}

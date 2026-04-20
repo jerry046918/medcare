@@ -467,7 +467,7 @@ const ReportUpload = () => {
   ];
 
   return (
-    <div>
+    <div className="page-fade-in">
       <Card
         title={
           <Space>
@@ -538,17 +538,29 @@ const ReportUpload = () => {
                 setOcrResult(null);
               }}
               accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf"
+              style={{
+                border: '2px dashed #3b82f6',
+                borderRadius: 12,
+                background: '#f0f9ff',
+                padding: '24px 16px'
+              }}
             >
-              <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-              <p className="ant-upload-text">点击或拖拽上传报告文件</p>
-              <p className="ant-upload-hint">支持 JPG / PNG / PDF 等格式，上传后自动识别指标</p>
+              <p className="ant-upload-drag-icon" style={{ marginBottom: 12 }}>
+                <InboxOutlined style={{ fontSize: 48, color: '#3b82f6' }} />
+              </p>
+              <p className="ant-upload-text" style={{ fontSize: 16, fontWeight: 500, color: '#334155' }}>
+                点击或拖拽上传报告文件
+              </p>
+              <p className="ant-upload-hint" style={{ color: '#64748b' }}>
+                支持 JPG / PNG / PDF 等格式，上传后自动识别指标
+              </p>
             </Dragger>
           </Form.Item>
 
           {/* OCR status bar */}
           {ocrStatus !== 'idle' && (
             <Alert
-              style={{ marginBottom: 16 }}
+              style={{ marginBottom: 16, borderRadius: 8 }}
               type={ocrStatus === 'recognizing' ? 'info' : ocrStatus === 'success' ? 'success' : 'error'}
               showIcon
               icon={
@@ -583,18 +595,19 @@ const ReportUpload = () => {
           )}
           {showRawText && ocrRawText && (
             <pre style={{
-              maxHeight: 200, overflow: 'auto', background: '#f5f5f5',
-              padding: 12, borderRadius: 4, fontSize: 12, marginBottom: 16
+              maxHeight: 200, overflow: 'auto', background: '#f8fafc',
+              padding: 16, borderRadius: 8, fontSize: 12, marginBottom: 16,
+              border: '1px solid #e2e8f0', color: '#475569', lineHeight: 1.6
             }}>
               {ocrRawText}
             </pre>
           )}
 
           {/* Indicator table */}
-          <Divider>
+          <Divider style={{ marginTop: 32, marginBottom: 24 }}>
             <Space>
-              <span>指标数据{indicatorData.length > 0 ? ` (${indicatorData.length} 项)` : ''}</span>
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleAddIndicator}>
+              <span style={{ fontSize: 15, fontWeight: 500, color: '#334155' }}>指标数据{indicatorData.length > 0 ? ` (${indicatorData.length} 项)` : ''}</span>
+              <Button type="primary" icon={<PlusOutlined />} size="small" onClick={handleAddIndicator}>
                 手动添加
               </Button>
             </Space>

@@ -10,6 +10,7 @@ const fsSync = require('fs');  // 同步方法
 const crypto = require('crypto');
 const axios = require('axios');
 const FormData = require('form-data');
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
 // OCR 引擎类型
 const OCR_ENGINE = {
   PADDLEOCR: 'paddleocr',
@@ -17,6 +18,47 @@ const OCR_ENGINE = {
   BAIDU_OCR: 'baidu_ocr',
   TENCENT_OCR: 'tencent_ocr'
 };
+
+/**
+ * PDF 文本提取（基于 pdfjs-dist，无原生依赖）
+ */
+async function processPDF(pdfBuffer, options = {}) {
+  try {
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(pdfBuffer) }).promise;
+    const numPages = doc.numPages;
+    const pageTexts = [];
+
+    for (let i = 1; i <= numPages; i++) {
+      const page = await doc.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      pageTexts.push({ page: i, text: pageText });
+    }
+
+    const combinedText = pageTexts
+      .filter(p => p.text.trim())
+      .map(p => p.text)
+      .join('\n\n');
+
+    if (!combinedText.trim()) {
+      return {
+        success: false,
+        text: '',
+        totalPages: numPages,
+        error: '该PDF为图片型文档，无法提取文字。请上传报告截图或照片以获得更好的识别效果。'
+      };
+    }
+
+    return {
+      success: true,
+      text: combinedText,
+      totalPages: numPages,
+      pageResults: pageTexts
+    };
+  } catch (error) {
+    throw new Error(`PDF处理失败: ${error.message}`);
+  }
+}
 
 /**
  * 基础 OCR 引擎类
@@ -447,6 +489,7 @@ const ocrService = new OCRService();
 
 module.exports = {
   ocrService,
+  processPDF,
   OCR_ENGINE,
   BaseOCREngine,
   PaddleOCREngine,

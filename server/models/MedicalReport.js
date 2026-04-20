@@ -29,10 +29,15 @@ module.exports = (sequelize) => {
         len: [0, 50]
       }
     },
-    pdfPath: {
+    filePath: {
       type: DataTypes.STRING,
       allowNull: true,
-      comment: 'PDF报告文件路径'
+      comment: '报告附件文件路径'
+    },
+    fileName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: '原始文件名'
     },
     notes: {
       type: DataTypes.TEXT,

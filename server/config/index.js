@@ -86,7 +86,7 @@ const fileMagicNumbers = {
 };
 
 // OCR 引擎白名单
-const allowedOCREngines = ['paddleocr', 'openai_vision', 'baidu_ocr', 'tencent_ocr'];
+const allowedOCREngines = ['paddleocr', 'openai_vision'];
 
 module.exports = {
   // 检查必需环境变量

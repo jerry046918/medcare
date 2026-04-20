@@ -1,6 +1,6 @@
 /**
  * OCR 服务模块
- * 支持多种 OCR 引擎：PaddleOCR (本地)、OpenAI Vision、百度 OCR、腾讯 OCR
+ * 支持多种 OCR 引擎：PaddleOCR (本地)、OpenAI Vision (云端)
  */
 
 const { spawn } = require('child_process');
@@ -14,9 +14,7 @@ const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
 // OCR 引擎类型
 const OCR_ENGINE = {
   PADDLEOCR: 'paddleocr',
-  OPENAI_VISION: 'openai_vision',
-  BAIDU_OCR: 'baidu_ocr',
-  TENCENT_OCR: 'tencent_ocr'
+  OPENAI_VISION: 'openai_vision'
 };
 
 /**
@@ -432,16 +430,6 @@ class OCRService {
       this.registerEngine(new OpenAIVisionEngine(config.openai_vision));
     }
 
-    // 注册百度 OCR
-    if (config.baidu_ocr?.enabled && config.baidu_ocr?.apiKey) {
-      this.registerEngine(new BaiduOCREngine(config.baidu_ocr));
-    }
-
-    // 注册腾讯 OCR
-    if (config.tencent_ocr?.enabled && config.tencent_ocr?.secretId) {
-      this.registerEngine(new TencentOCREngine(config.tencent_ocr));
-    }
-
     // 设置默认引擎
     if (config.defaultEngine && this.engines.has(config.defaultEngine)) {
       this.defaultEngine = config.defaultEngine;
@@ -493,7 +481,5 @@ module.exports = {
   OCR_ENGINE,
   BaseOCREngine,
   PaddleOCREngine,
-  OpenAIVisionEngine,
-  BaiduOCREngine,
-  TencentOCREngine
+  OpenAIVisionEngine
 };

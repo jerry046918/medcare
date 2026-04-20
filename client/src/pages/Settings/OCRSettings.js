@@ -14,11 +14,12 @@ import {
   Card,
   message,
   Spin,
-  Tag
+  Tag,
+  Radio
 } from 'antd';
 import {
   CloudOutlined,
-  ApiOutlined,
+  LaptopOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   SaveOutlined
@@ -26,7 +27,6 @@ import {
 import api from '../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
-const { Option } = Select;
 const { Password } = Input;
 
 const OCRSettings = () => {
@@ -34,13 +34,6 @@ const OCRSettings = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [engines, setEngines] = useState([]);
-  const [config, setConfig] = useState({
-    defaultEngine: 'paddleocr',
-    paddleocr: { enabled: true, pythonPath: 'python' },
-    openai_vision: { enabled: false, apiKey: '', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
-    baidu_ocr: { enabled: false, apiKey: '', secretKey: '' },
-    tencent_ocr: { enabled: false, secretId: '', secretKey: '', region: 'ap-beijing' }
-  });
 
   useEffect(() => {
     loadConfig();
@@ -52,7 +45,6 @@ const OCRSettings = () => {
     try {
       const response = await api.get('/config/ocr/full');
       if (response.data.success) {
-        setConfig(response.data.data);
         form.setFieldsValue(response.data.data);
       }
     } catch (error) {
@@ -80,7 +72,7 @@ const OCRSettings = () => {
       const response = await api.post('/config/ocr/batch', values);
       if (response.data.success) {
         message.success('OCR 配置保存成功');
-        loadEngines(); // 刷新引擎状态
+        loadEngines();
       }
     } catch (error) {
       console.error('保存 OCR 配置失败:', error);
@@ -109,75 +101,59 @@ const OCRSettings = () => {
       form={form}
       layout="vertical"
       onFinish={handleSave}
-      initialValues={config}
+      initialValues={{
+        defaultEngine: 'paddleocr',
+        paddleocr: { enabled: true, pythonPath: 'python' },
+        openai_vision: { enabled: false, apiKey: '', baseURL: '', model: '' }
+      }}
     >
-      {/* 默认引擎选择 */}
-      <Card title="默认 OCR 引擎" style={{ marginBottom: 24 }}>
+      {/* 引擎选择 */}
+      <Card title="OCR 识别引擎" style={{ marginBottom: 24 }}>
         <Form.Item
           name="defaultEngine"
-          label="选择默认引擎"
-          rules={[{ required: true, message: '请选择默认 OCR 引擎' }]}
+          label="选择识别引擎"
+          rules={[{ required: true, message: '请选择 OCR 引擎' }]}
         >
-          <Select>
-            <Option value="paddleocr">
-              <Space>
-                PaddleOCR (本地)
-                {getEngineStatus('paddleocr') ? 
-                  <Tag color="green" icon={<CheckCircleOutlined />}>可用</Tag> :
-                  <Tag color="red" icon={<CloseCircleOutlined />}>不可用</Tag>
-                }
-              </Space>
-            </Option>
-            <Option value="openai_vision">
-              <Space>
-                OpenAI Vision (云端)
-                {getEngineStatus('openai_vision') ? 
-                  <Tag color="green" icon={<CheckCircleOutlined />}>可用</Tag> :
-                  <Tag color="orange">需配置</Tag>
-                }
-              </Space>
-            </Option>
-            <Option value="baidu_ocr">
-              <Space>
-                百度 OCR (云端)
-                {getEngineStatus('baidu_ocr') ? 
-                  <Tag color="green" icon={<CheckCircleOutlined />}>可用</Tag> :
-                  <Tag color="orange">需配置</Tag>
-                }
-              </Space>
-            </Option>
-            <Option value="tencent_ocr">
-              <Space>
-                腾讯 OCR (云端)
-                {getEngineStatus('tencent_ocr') ? 
-                  <Tag color="green" icon={<CheckCircleOutlined />}>可用</Tag> :
-                  <Tag color="orange">需配置</Tag>
-                }
-              </Space>
-            </Option>
-          </Select>
+          <Radio.Group>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Radio value="paddleocr">
+                <Space>
+                  <LaptopOutlined />
+                  <span>本地 OCR (PaddleOCR)</span>
+                  {getEngineStatus('paddleocr') ?
+                    <Tag color="green" icon={<CheckCircleOutlined />}>可用</Tag> :
+                    <Tag color="red" icon={<CloseCircleOutlined />}>不可用</Tag>
+                  }
+                </Space>
+                <div style={{ marginLeft: 24, color: '#888', fontSize: 13 }}>
+                  数据不出本地，需要 Python 环境
+                </div>
+              </Radio>
+              <Radio value="openai_vision">
+                <Space>
+                  <CloudOutlined />
+                  <span>云端 OCR</span>
+                  {getEngineStatus('openai_vision') ?
+                    <Tag color="green" icon={<CheckCircleOutlined />}>已配置</Tag> :
+                    <Tag color="orange">未配置</Tag>
+                  }
+                </Space>
+                <div style={{ marginLeft: 24, color: '#888', fontSize: 13 }}>
+                  兼容 OpenAI API 格式，支持多种服务商
+                </div>
+              </Radio>
+            </Space>
+          </Radio.Group>
         </Form.Item>
-        <Alert
-          message="引擎说明"
-          description={
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              <li><b>PaddleOCR</b>：本地引擎，需要 Python 环境，识别效果好，数据不出本地</li>
-              <li><b>OpenAI Vision</b>：云端引擎，识别精度高，能理解复杂报告结构，需要 API Key</li>
-              <li><b>百度 OCR</b>：国内云服务，中文识别效果好，需要申请 API Key</li>
-              <li><b>腾讯 OCR</b>：国内云服务，稳定可靠，需要申请 Secret ID/Key</li>
-            </ul>
-          }
-          type="info"
-          showIcon
-        />
       </Card>
 
-      {/* PaddleOCR 配置 */}
-      <Card 
+      {/* 本地 OCR 配置 */}
+      <Card
         title={
           <Space>
-            <span>PaddleOCR (本地引擎)</span>
-            {getEngineStatus('paddleocr') ? 
+            <LaptopOutlined />
+            <span>本地 OCR 配置</span>
+            {getEngineStatus('paddleocr') ?
               <Tag color="green" icon={<CheckCircleOutlined />}>可用</Tag> :
               <Tag color="red" icon={<CloseCircleOutlined />}>不可用</Tag>
             }
@@ -186,15 +162,15 @@ const OCRSettings = () => {
         style={{ marginBottom: 24 }}
       >
         <Alert
-          message="配置要求"
-          description="PaddleOCR 需要安装 Python 环境和 PaddleOCR 库。请运行: pip install paddleocr"
+          message="需要安装 Python 环境和 PaddleOCR 库"
+          description="运行: pip install paddleocr paddlepaddle"
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
         />
         <Form.Item
           name={['paddleocr', 'enabled']}
-          label="启用 PaddleOCR"
+          label="启用本地 OCR"
           valuePropName="checked"
         >
           <Switch />
@@ -202,19 +178,19 @@ const OCRSettings = () => {
         <Form.Item
           name={['paddleocr', 'pythonPath']}
           label="Python 路径"
-          extra="默认使用系统 PATH 中的 python，如需指定请填写完整路径"
+          extra="默认使用系统 PATH 中的 python"
         >
           <Input placeholder="python 或 python3 或完整路径" />
         </Form.Item>
       </Card>
 
-      {/* OpenAI Vision 配置 */}
-      <Card 
+      {/* 云端 OCR 配置 */}
+      <Card
         title={
           <Space>
             <CloudOutlined />
-            <span>OpenAI Vision (云端)</span>
-            {getEngineStatus('openai_vision') ? 
+            <span>云端 OCR 配置</span>
+            {getEngineStatus('openai_vision') ?
               <Tag color="green" icon={<CheckCircleOutlined />}>已配置</Tag> :
               <Tag color="orange">未配置</Tag>
             }
@@ -222,12 +198,27 @@ const OCRSettings = () => {
         }
         style={{ marginBottom: 24 }}
       >
+        <Alert
+          message="支持所有兼容 OpenAI API 格式的服务商"
+          description="如 OpenAI、DeepSeek、通义千问、智谱、Siliconflow 等，填写对应的 Base URL、API Key 和模型名称即可"
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
         <Form.Item
           name={['openai_vision', 'enabled']}
-          label="启用 OpenAI Vision"
+          label="启用云端 OCR"
           valuePropName="checked"
         >
           <Switch />
+        </Form.Item>
+        <Form.Item
+          name={['openai_vision', 'baseURL']}
+          label="API Base URL"
+          rules={[{ required: form.getFieldValue(['openai_vision', 'enabled']), message: '请输入 API 地址' }]}
+          extra="服务商提供的 API 地址，如 https://api.openai.com/v1"
+        >
+          <Input placeholder="https://api.openai.com/v1" />
         </Form.Item>
         <Form.Item
           name={['openai_vision', 'apiKey']}
@@ -237,120 +228,12 @@ const OCRSettings = () => {
           <Password placeholder="sk-..." />
         </Form.Item>
         <Form.Item
-          name={['openai_vision', 'baseURL']}
-          label="API Base URL"
-          extra="默认使用 OpenAI 官方地址，如使用代理可修改"
-        >
-          <Input placeholder="https://api.openai.com/v1" />
-        </Form.Item>
-        <Form.Item
           name={['openai_vision', 'model']}
-          label="模型"
+          label="模型 ID"
+          rules={[{ required: form.getFieldValue(['openai_vision', 'enabled']), message: '请输入模型名称' }]}
+          extra="如 gpt-4o、deepseek-chat、qwen-vl-plus 等"
         >
-          <Select>
-            <Option value="gpt-4o">GPT-4o (推荐)</Option>
-            <Option value="gpt-4o-mini">GPT-4o Mini (更便宜)</Option>
-            <Option value="gpt-4-turbo">GPT-4 Turbo</Option>
-          </Select>
-        </Form.Item>
-      </Card>
-
-      {/* 百度 OCR 配置 */}
-      <Card 
-        title={
-          <Space>
-            <ApiOutlined />
-            <span>百度 OCR (云端)</span>
-            {getEngineStatus('baidu_ocr') ? 
-              <Tag color="green" icon={<CheckCircleOutlined />}>已配置</Tag> :
-              <Tag color="orange">未配置</Tag>
-            }
-          </Space>
-        }
-        style={{ marginBottom: 24 }}
-      >
-        <Alert
-          message="申请地址"
-          description={<a href="https://console.bce.baidu.com/ai/#/ai/ocr/overview/index" target="_blank" rel="noopener noreferrer">https://console.bce.baidu.com/ai/#/ai/ocr/overview/index</a>}
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-        <Form.Item
-          name={['baidu_ocr', 'enabled']}
-          label="启用百度 OCR"
-          valuePropName="checked"
-        >
-          <Switch />
-        </Form.Item>
-        <Form.Item
-          name={['baidu_ocr', 'apiKey']}
-          label="API Key"
-          rules={[{ required: form.getFieldValue(['baidu_ocr', 'enabled']), message: '请输入 API Key' }]}
-        >
-          <Input placeholder="请输入百度云 API Key" />
-        </Form.Item>
-        <Form.Item
-          name={['baidu_ocr', 'secretKey']}
-          label="Secret Key"
-          rules={[{ required: form.getFieldValue(['baidu_ocr', 'enabled']), message: '请输入 Secret Key' }]}
-        >
-          <Password placeholder="请输入百度云 Secret Key" />
-        </Form.Item>
-      </Card>
-
-      {/* 腾讯 OCR 配置 */}
-      <Card 
-        title={
-          <Space>
-            <ApiOutlined />
-            <span>腾讯 OCR (云端)</span>
-            {getEngineStatus('tencent_ocr') ? 
-              <Tag color="green" icon={<CheckCircleOutlined />}>已配置</Tag> :
-              <Tag color="orange">未配置</Tag>
-            }
-          </Space>
-        }
-        style={{ marginBottom: 24 }}
-      >
-        <Alert
-          message="申请地址"
-          description={<a href="https://console.cloud.tencent.com/ocr" target="_blank" rel="noopener noreferrer">https://console.cloud.tencent.com/ocr</a>}
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-        <Form.Item
-          name={['tencent_ocr', 'enabled']}
-          label="启用腾讯 OCR"
-          valuePropName="checked"
-        >
-          <Switch />
-        </Form.Item>
-        <Form.Item
-          name={['tencent_ocr', 'secretId']}
-          label="Secret ID"
-          rules={[{ required: form.getFieldValue(['tencent_ocr', 'enabled']), message: '请输入 Secret ID' }]}
-        >
-          <Input placeholder="请输入腾讯云 Secret ID" />
-        </Form.Item>
-        <Form.Item
-          name={['tencent_ocr', 'secretKey']}
-          label="Secret Key"
-          rules={[{ required: form.getFieldValue(['tencent_ocr', 'enabled']), message: '请输入 Secret Key' }]}
-        >
-          <Password placeholder="请输入腾讯云 Secret Key" />
-        </Form.Item>
-        <Form.Item
-          name={['tencent_ocr', 'region']}
-          label="服务区域"
-        >
-          <Select>
-            <Option value="ap-beijing">北京</Option>
-            <Option value="ap-shanghai">上海</Option>
-            <Option value="ap-guangzhou">广州</Option>
-            <Option value="ap-chengdu">成都</Option>
-          </Select>
+          <Input placeholder="gpt-4o" />
         </Form.Item>
       </Card>
 

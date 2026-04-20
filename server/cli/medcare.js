@@ -258,20 +258,23 @@ reports
 
 reports
   .command('upload')
-  .description('创建报告（使用已验证的指标数据）')
+  .description('创建报告。指标数据支持两种格式：\n' +
+    '  1) 含 indicatorId 的完整数据（来自 ocr 命令）\n' +
+    '  2) 仅含 name + value 的简洁格式（Agent 自行识别报告后提供，CLI 自动匹配 ID）')
   .requiredOption('--member <id>', '家庭成员 ID')
   .requiredOption('--file <path>', '报告文件路径')
   .requiredOption('--date <date>', '报告日期 (YYYY-MM-DD)')
-  .requiredOption('--indicator-data <json>', '指标数据 JSON（来自 ocr 命令的 indicatorData 字段）')
+  .requiredOption('--indicator-data <json>', '指标数据 JSON 数组')
   .option('--hospital <name>', '医院名称')
   .option('--doctor <name>', '医生姓名')
   .option('--notes <text>', '备注')
   .action(async (opts) => {
     const api = getAxios();
+    const pretty = program.opts().pretty;
     const filePath = path.resolve(opts.file);
 
     if (!fs.existsSync(filePath)) {
-      output({ error: `文件不存在: ${filePath}` }, program.opts().pretty);
+      output({ error: `文件不存在: ${filePath}` }, pretty);
       process.exit(1);
     }
 
@@ -279,24 +282,82 @@ reports
     try {
       indicatorData = JSON.parse(opts.indicatorData);
     } catch (e) {
-      output({ error: `indicator-data JSON 解析失败: ${e.message}` }, program.opts().pretty);
+      output({ error: `indicator-data JSON 解析失败: ${e.message}` }, pretty);
       process.exit(1);
     }
 
     if (!Array.isArray(indicatorData)) {
-      output({ error: 'indicator-data 必须是 JSON 数组' }, program.opts().pretty);
+      output({ error: 'indicator-data 必须是 JSON 数组' }, pretty);
       process.exit(1);
     }
 
-    // Validate: all entries must have indicatorId
-    const missingId = indicatorData.filter(ind => !ind.indicatorId);
-    if (missingId.length > 0) {
+    // Resolve names to indicatorIds for entries that only have name
+    const needsMatch = indicatorData.filter(ind => !ind.indicatorId && ind.name);
+    if (needsMatch.length > 0) {
+      // Fetch all indicators for matching
+      const indRes = await api.get('/indicators');
+      if (indRes.status >= 400) {
+        handleResponse(indRes, pretty);
+        return;
+      }
+      const allIndicators = indRes.data.data || [];
+
+      // Build lookup maps
+      const byName = new Map();
+      const byAlias = new Map();
+      for (const ind of allIndicators) {
+        byName.set(ind.name.toLowerCase(), ind);
+        if (ind.aliases && Array.isArray(ind.aliases)) {
+          for (const alias of ind.aliases) {
+            byAlias.set(alias.toLowerCase(), ind);
+          }
+        }
+      }
+
+      for (const item of needsMatch) {
+        const key = item.name.toLowerCase();
+        const found = byName.get(key) || byAlias.get(key);
+        if (found) {
+          item.indicatorId = found.id;
+          item._matchedName = found.name;
+          // Fill in reference range if not provided
+          if (!item.referenceRange && found.referenceRange) {
+            item.referenceRange = found.referenceRange;
+          }
+        }
+      }
+    }
+
+    // Separate resolved vs unresolved
+    const resolved = indicatorData.filter(ind => ind.indicatorId);
+    const unresolved = indicatorData.filter(ind => !ind.indicatorId);
+
+    if (unresolved.length > 0) {
       output({
-        error: `${missingId.length} 个指标缺少 indicatorId，请先通过 indicators add 添加或手动匹配`,
-        missingIndicators: missingId.map(ind => ind.name || ind),
-      }, program.opts().pretty);
+        error: `${unresolved.length} 个指标无法匹配到指标库`,
+        hint: '请先通过 "medcare indicators add" 添加缺失指标，或通过 "medcare indicators list --search" 查找正确的名称',
+        unresolvedIndicators: unresolved.map(ind => ({
+          name: ind.name,
+          value: ind.value,
+          unit: ind.unit || '',
+        })),
+        resolvedCount: resolved.length,
+      }, pretty);
       process.exit(1);
     }
+
+    // Clean up internal fields
+    const cleanData = resolved.map(ind => {
+      const clean = {
+        indicatorId: ind.indicatorId,
+        value: ind.value,
+      };
+      if (ind.referenceRange) clean.referenceRange = ind.referenceRange;
+      if (ind.isNormal !== undefined) clean.isNormal = ind.isNormal;
+      if (ind.abnormalType) clean.abnormalType = ind.abnormalType;
+      if (ind.notes) clean.notes = ind.notes;
+      return clean;
+    });
 
     const form = new FormData();
     form.append('familyMemberId', opts.member);
@@ -304,7 +365,7 @@ reports
     if (opts.hospital) form.append('hospitalName', opts.hospital);
     if (opts.doctor) form.append('doctorName', opts.doctor);
     if (opts.notes) form.append('notes', opts.notes);
-    form.append('indicatorData', JSON.stringify(indicatorData));
+    form.append('indicatorData', JSON.stringify(cleanData));
     form.append('file', fs.createReadStream(filePath));
 
     const res = await api.post('/reports', form, {
@@ -313,7 +374,22 @@ reports
       maxBodyLength: Infinity,
     });
 
-    handleResponse(res, program.opts().pretty);
+    // Attach match summary to response for agent visibility
+    const matchNames = resolved.filter(ind => ind._matchedName);
+    if (matchNames.length > 0 && res.data.success) {
+      const result = { ...res.data };
+      result._matchSummary = {
+        totalIndicators: cleanData.length,
+        autoMatchedByName: matchNames.map(ind => ({
+          providedName: ind.name,
+          matchedTo: ind._matchedName,
+          indicatorId: ind.indicatorId,
+        })),
+      };
+      output(result, pretty);
+    } else {
+      handleResponse(res, pretty);
+    }
   });
 
 reports

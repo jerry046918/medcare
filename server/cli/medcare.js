@@ -174,11 +174,95 @@ reports
   });
 
 reports
-  .command('upload')
-  .description('上传报告文件并自动 OCR 识别')
-  .requiredOption('--member <id>', '家庭成员 ID')
+  .command('ocr')
+  .description('对文件执行 OCR 识别，返回解析的指标（不创建报告）')
   .requiredOption('--file <path>', '报告文件路径（图片或 PDF）')
+  .action(async (opts) => {
+    const api = getAxios();
+    const filePath = path.resolve(opts.file);
+
+    if (!fs.existsSync(filePath)) {
+      output({ error: `文件不存在: ${filePath}` }, program.opts().pretty);
+      process.exit(1);
+    }
+
+    const form = new FormData();
+    form.append('image', fs.createReadStream(filePath));
+
+    const res = await api.post('/ocr/recognize-and-parse', form, {
+      headers: { ...form.getHeaders() },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+    });
+
+    if (res.status >= 400) {
+      handleResponse(res, program.opts().pretty);
+      return;
+    }
+
+    const ocrData = res.data.data || {};
+    const rawIndicators = ocrData.indicators || [];
+    const ocrText = ocrData.ocr?.text || '';
+    const isPDF = ocrData.isPDF || false;
+
+    // Classify indicators
+    const matched = [];
+    const unmatched = [];
+
+    for (const ind of rawIndicators) {
+      const item = {
+        name: ind.name || '',
+        value: ind.value || '',
+        unit: ind.unit || '',
+        referenceRange: ind.referenceRange || '',
+        isNormal: ind.isNormal,
+        abnormalType: ind.abnormalType || 'normal',
+      };
+
+      if (ind.indicatorId) {
+        item.indicatorId = ind.indicatorId;
+        item.matched = true;
+        item.indicatorName = ind.indicatorName || ind.name || '';
+        matched.push(item);
+      } else {
+        item.matched = false;
+        unmatched.push(item);
+      }
+    }
+
+    // Build suggested indicatorData for upload
+    const indicatorData = matched.map(ind => ({
+      indicatorId: ind.indicatorId,
+      value: ind.value,
+      referenceRange: ind.referenceRange,
+      isNormal: ind.isNormal !== undefined ? ind.isNormal : true,
+      abnormalType: ind.abnormalType,
+    }));
+
+    output({
+      success: true,
+      isPDF,
+      ocrEngine: ocrData.engine || '',
+      totalPages: ocrData.ocr?.totalPages || null,
+      summary: {
+        total: rawIndicators.length,
+        matched: matched.length,
+        unmatched: unmatched.length,
+      },
+      matched,
+      unmatched,
+      indicatorData,
+      ocrText,
+    }, program.opts().pretty);
+  });
+
+reports
+  .command('upload')
+  .description('创建报告（使用已验证的指标数据）')
+  .requiredOption('--member <id>', '家庭成员 ID')
+  .requiredOption('--file <path>', '报告文件路径')
   .requiredOption('--date <date>', '报告日期 (YYYY-MM-DD)')
+  .requiredOption('--indicator-data <json>', '指标数据 JSON（来自 ocr 命令的 indicatorData 字段）')
   .option('--hospital <name>', '医院名称')
   .option('--doctor <name>', '医生姓名')
   .option('--notes <text>', '备注')
@@ -191,47 +275,36 @@ reports
       process.exit(1);
     }
 
-    // Step 1: OCR recognition
-    let ocrData = [];
+    let indicatorData;
     try {
-      const ocrForm = new FormData();
-      ocrForm.append('image', fs.createReadStream(filePath));
-      const ocrRes = await api.post('/ocr/recognize-and-parse', ocrForm, {
-        headers: { ...ocrForm.getHeaders() },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      });
-
-      if (ocrRes.data.success && ocrRes.data.data?.indicators) {
-        ocrData = ocrRes.data.data.indicators
-          .filter(ind => ind.indicatorId)
-          .map(ind => ({
-            indicatorId: ind.indicatorId,
-            value: ind.value,
-            referenceRange: ind.referenceRange || '',
-            isNormal: ind.isNormal !== undefined ? ind.isNormal : true,
-            abnormalType: ind.abnormalType || 'normal',
-            notes: ind.notes || '',
-          }));
-
-        if (program.opts().pretty) {
-          console.error(`OCR 识别到 ${ocrData.length} 个匹配指标`);
-        }
-      }
+      indicatorData = JSON.parse(opts.indicatorData);
     } catch (e) {
-      if (program.opts().pretty) {
-        console.error(`OCR 识别失败（将创建空报告）: ${e.message}`);
-      }
+      output({ error: `indicator-data JSON 解析失败: ${e.message}` }, program.opts().pretty);
+      process.exit(1);
     }
 
-    // Step 2: Create report with file
+    if (!Array.isArray(indicatorData)) {
+      output({ error: 'indicator-data 必须是 JSON 数组' }, program.opts().pretty);
+      process.exit(1);
+    }
+
+    // Validate: all entries must have indicatorId
+    const missingId = indicatorData.filter(ind => !ind.indicatorId);
+    if (missingId.length > 0) {
+      output({
+        error: `${missingId.length} 个指标缺少 indicatorId，请先通过 indicators add 添加或手动匹配`,
+        missingIndicators: missingId.map(ind => ind.name || ind),
+      }, program.opts().pretty);
+      process.exit(1);
+    }
+
     const form = new FormData();
     form.append('familyMemberId', opts.member);
     form.append('reportDate', opts.date);
     if (opts.hospital) form.append('hospitalName', opts.hospital);
     if (opts.doctor) form.append('doctorName', opts.doctor);
     if (opts.notes) form.append('notes', opts.notes);
-    form.append('indicatorData', JSON.stringify(ocrData));
+    form.append('indicatorData', JSON.stringify(indicatorData));
     form.append('file', fs.createReadStream(filePath));
 
     const res = await api.post('/reports', form, {

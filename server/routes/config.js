@@ -28,18 +28,6 @@ function maskOcrSecrets(config) {
   if (masked.openai_vision?.apiKey) {
     masked.openai_vision = { ...masked.openai_vision, apiKey: maskSecret(masked.openai_vision.apiKey) };
   }
-  // 百度 OCR
-  if (masked.baidu_ocr) {
-    masked.baidu_ocr = { ...masked.baidu_ocr };
-    if (masked.baidu_ocr.apiKey) masked.baidu_ocr.apiKey = maskSecret(masked.baidu_ocr.apiKey);
-    if (masked.baidu_ocr.secretKey) masked.baidu_ocr.secretKey = maskSecret(masked.baidu_ocr.secretKey);
-  }
-  // 腾讯 OCR
-  if (masked.tencent_ocr) {
-    masked.tencent_ocr = { ...masked.tencent_ocr };
-    if (masked.tencent_ocr.secretId) masked.tencent_ocr.secretId = maskSecret(masked.tencent_ocr.secretId);
-    if (masked.tencent_ocr.secretKey) masked.tencent_ocr.secretKey = maskSecret(masked.tencent_ocr.secretKey);
-  }
   return masked;
 }
 
@@ -306,7 +294,7 @@ router.delete('/:key', authenticateToken, async (req, res) => {
  */
 router.post('/ocr/batch', authenticateToken, async (req, res) => {
   try {
-    const { defaultEngine, paddleocr, openai_vision, baidu_ocr, tencent_ocr } = req.body;
+    const { defaultEngine, paddleocr, openai_vision } = req.body;
 
     const configs = [];
 
@@ -353,30 +341,6 @@ router.post('/ocr/batch', authenticateToken, async (req, res) => {
       });
     }
 
-    // 百度 OCR 配置
-    if (baidu_ocr) {
-      configs.push({
-        configKey: 'ocr_baidu_ocr',
-        configValue: JSON.stringify(baidu_ocr),
-        configType: 'json',
-        category: 'ocr',
-        description: '百度 OCR 配置',
-        isPublic: false
-      });
-    }
-
-    // 腾讯 OCR 配置
-    if (tencent_ocr) {
-      configs.push({
-        configKey: 'ocr_tencent_ocr',
-        configValue: JSON.stringify(tencent_ocr),
-        configType: 'json',
-        category: 'ocr',
-        description: '腾讯 OCR 配置',
-        isPublic: false
-      });
-    }
-
     // 批量更新或创建
     for (const configData of configs) {
       await SystemConfig.upsert(configData);
@@ -411,9 +375,7 @@ router.get('/ocr/full', authenticateToken, async (req, res) => {
     const result = {
       defaultEngine: 'paddleocr',
       paddleocr: { enabled: true, pythonPath: 'python' },
-      openai_vision: { enabled: false, apiKey: '', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
-      baidu_ocr: { enabled: false, apiKey: '', secretKey: '' },
-      tencent_ocr: { enabled: false, secretId: '', secretKey: '', region: 'ap-beijing' }
+      openai_vision: { enabled: false, apiKey: '', baseURL: '', model: '' }
     };
 
     for (const config of configs) {

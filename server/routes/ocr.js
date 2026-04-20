@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { authenticateToken } = require('../middleware/auth');
 const { ocrLimiter, uploadLimiter } = require('../middleware/rateLimiter');
-const { ocrService, OCR_ENGINE } = require('../services/ocrService');
+const { ocrService, OCR_ENGINE, processPDF } = require('../services/ocrService');
 const { processOCRResult, createIndicatorFromExtracted } = require('../services/indicatorParserService');
 const { SystemConfig, MedicalIndicator } = require('../models');
 const {
@@ -318,14 +318,40 @@ router.post('/recognize-and-parse', authenticateToken, ocrLimiter, upload.single
       useEngine = OCR_ENGINE.PADDLEOCR;
     }
 
-    // 1. 执行 OCR 识别
-    const ocrResult = await service.recognize(imageBuffer, {
-      engine: useEngine,
-      mimeType: req.file.mimetype
-    });
+    const isPDF = req.file.mimetype === 'application/pdf' ||
+                  req.file.originalname?.toLowerCase().endsWith('.pdf');
 
-    // 2. 解析指标
-    const parseResult = await processOCRResult({ text: ocrResult.text });
+    let ocrResult;
+    let parseResult;
+
+    if (isPDF) {
+      // PDF — extract text directly
+      const pdfResult = await processPDF(imageBuffer);
+
+      if (!pdfResult.success) {
+        try { await fs.unlink(safePath); } catch (e) {}
+        return res.json({
+          success: false,
+          message: pdfResult.error || 'PDF文字提取失败',
+          data: { totalPages: pdfResult.totalPages }
+        });
+      }
+
+      ocrResult = {
+        success: true,
+        text: pdfResult.text,
+        engine: 'pdf-extract',
+        totalPages: pdfResult.totalPages
+      };
+      parseResult = await processOCRResult({ text: pdfResult.text });
+    } else {
+      // Image — existing OCR flow
+      ocrResult = await service.recognize(imageBuffer, {
+        engine: useEngine,
+        mimeType: req.file.mimetype
+      });
+      parseResult = await processOCRResult({ text: ocrResult.text });
+    }
 
     // 清理临时文件
     try {
@@ -339,7 +365,8 @@ router.post('/recognize-and-parse', authenticateToken, ocrLimiter, upload.single
       data: {
         ocr: ocrResult,
         indicators: parseResult,
-        engine: useEngine
+        engine: useEngine,
+        isPDF
       }
     });
 

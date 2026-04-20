@@ -1,6 +1,6 @@
 /**
  * OCR 服务模块
- * 支持多种 OCR 引擎：PaddleOCR (本地)、OpenAI Vision、百度 OCR、腾讯 OCR
+ * 支持多种 OCR 引擎：PaddleOCR (本地)、OpenAI Vision (云端)
  */
 
 const { spawn } = require('child_process');
@@ -10,13 +10,53 @@ const fsSync = require('fs');  // 同步方法
 const crypto = require('crypto');
 const axios = require('axios');
 const FormData = require('form-data');
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
 // OCR 引擎类型
 const OCR_ENGINE = {
   PADDLEOCR: 'paddleocr',
-  OPENAI_VISION: 'openai_vision',
-  BAIDU_OCR: 'baidu_ocr',
-  TENCENT_OCR: 'tencent_ocr'
+  OPENAI_VISION: 'openai_vision'
 };
+
+/**
+ * PDF 文本提取（基于 pdfjs-dist，无原生依赖）
+ */
+async function processPDF(pdfBuffer, options = {}) {
+  try {
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(pdfBuffer) }).promise;
+    const numPages = doc.numPages;
+    const pageTexts = [];
+
+    for (let i = 1; i <= numPages; i++) {
+      const page = await doc.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      pageTexts.push({ page: i, text: pageText });
+    }
+
+    const combinedText = pageTexts
+      .filter(p => p.text.trim())
+      .map(p => p.text)
+      .join('\n\n');
+
+    if (!combinedText.trim()) {
+      return {
+        success: false,
+        text: '',
+        totalPages: numPages,
+        error: '该PDF为图片型文档，无法提取文字。请上传报告截图或照片以获得更好的识别效果。'
+      };
+    }
+
+    return {
+      success: true,
+      text: combinedText,
+      totalPages: numPages,
+      pageResults: pageTexts
+    };
+  } catch (error) {
+    throw new Error(`PDF处理失败: ${error.message}`);
+  }
+}
 
 /**
  * 基础 OCR 引擎类
@@ -390,16 +430,6 @@ class OCRService {
       this.registerEngine(new OpenAIVisionEngine(config.openai_vision));
     }
 
-    // 注册百度 OCR
-    if (config.baidu_ocr?.enabled && config.baidu_ocr?.apiKey) {
-      this.registerEngine(new BaiduOCREngine(config.baidu_ocr));
-    }
-
-    // 注册腾讯 OCR
-    if (config.tencent_ocr?.enabled && config.tencent_ocr?.secretId) {
-      this.registerEngine(new TencentOCREngine(config.tencent_ocr));
-    }
-
     // 设置默认引擎
     if (config.defaultEngine && this.engines.has(config.defaultEngine)) {
       this.defaultEngine = config.defaultEngine;
@@ -447,10 +477,9 @@ const ocrService = new OCRService();
 
 module.exports = {
   ocrService,
+  processPDF,
   OCR_ENGINE,
   BaseOCREngine,
   PaddleOCREngine,
-  OpenAIVisionEngine,
-  BaiduOCREngine,
-  TencentOCREngine
+  OpenAIVisionEngine
 };

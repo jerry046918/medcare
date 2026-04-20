@@ -18,18 +18,25 @@ import {
   Popconfirm,
   Spin,
   Alert,
+  Modal,
   Tag
 } from 'antd';
 import {
   ArrowLeftOutlined,
   PlusOutlined,
   DeleteOutlined,
-  InboxOutlined
+  InboxOutlined,
+  LoadingOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  RedoOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { fetchReportDetail, updateReport } from '../../store/slices/reportSlice';
 import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
 import { fetchIndicators } from '../../store/slices/indicatorSlice';
+import ocrAPI from '../../services/ocrAPI';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -40,13 +47,18 @@ const ReportEdit = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [form] = Form.useForm();
-  
+
   const { currentReport, isLoading, isUpdating } = useSelector(state => state.reports);
   const { list: familyMembers } = useSelector(state => state.familyMembers);
   const { list: indicators } = useSelector(state => state.indicators);
-  
+
   const [indicatorData, setIndicatorData] = useState([]);
   const [fileList, setFileList] = useState([]);
+  const [reportFile, setReportFile] = useState(null);
+  const [ocrStatus, setOcrStatus] = useState('idle');
+  const [ocrError, setOcrError] = useState(null);
+  const [ocrRawText, setOcrRawText] = useState('');
+  const [showRawText, setShowRawText] = useState(false);
 
   // 自动判断异常状态的函数
   const checkAbnormalStatus = useCallback((indicatorId, value) => {
@@ -108,7 +120,7 @@ const ReportEdit = () => {
         doctorName: currentReport.doctorName,
         notes: currentReport.notes
       });
-      
+
       // 设置指标数据
       if (currentReport.indicatorData) {
         const formattedIndicatorData = currentReport.indicatorData.map((item, index) => {
@@ -121,7 +133,7 @@ const ReportEdit = () => {
             abnormalType: item.abnormalType,
             notes: item.notes
           };
-          
+
           return baseItem;
         });
         setIndicatorData(formattedIndicatorData);
@@ -132,7 +144,7 @@ const ReportEdit = () => {
   // 当indicators加载完成后，重新计算指标的异常状态
   useEffect(() => {
     if (indicators && indicators.length > 0 && indicatorData.length > 0) {
-      setIndicatorData(prevData => 
+      setIndicatorData(prevData =>
         prevData.map(item => {
           // 如果没有异常状态信息或需要重新计算，自动计算
           if (item.indicatorId && item.value && (item.abnormalType === undefined || item.abnormalType === null)) {
@@ -145,30 +157,114 @@ const ReportEdit = () => {
     }
   }, [indicators, checkAbnormalStatus]);
 
+  const handleFileSelect = async (file) => {
+    const isValidType = file.type.startsWith('image/') || file.type === 'application/pdf';
+    if (!isValidType) {
+      message.error('仅支持图片和PDF文件');
+      return false;
+    }
+    const isLt10M = file.size / 1024 / 1024 < 10;
+    if (!isLt10M) {
+      message.error('文件大小不能超过10MB');
+      return false;
+    }
+
+    setReportFile(file);
+    setOcrStatus('recognizing');
+    setOcrError(null);
+    setOcrRawText('');
+
+    try {
+      const response = await ocrAPI.recognizeAndParse(file);
+      if (response.success && response.data) {
+        setOcrStatus('success');
+        setOcrRawText(response.data.ocr?.text || '');
+
+        if (response.data.indicators && response.data.indicators.length > 0) {
+          populateIndicatorsFromOCR(response.data.indicators);
+        }
+      } else {
+        setOcrStatus('error');
+        setOcrError(response.message || 'OCR识别失败');
+      }
+    } catch (error) {
+      setOcrStatus('error');
+      setOcrError(error.response?.data?.message || error.message || 'OCR识别失败');
+    }
+
+    return false;
+  };
+
+  const populateIndicatorsFromOCR = (parsedIndicators) => {
+    const newItems = [];
+    for (let i = 0; i < parsedIndicators.length; i++) {
+      const item = parsedIndicators[i];
+      newItems.push({
+        id: Date.now() + i,
+        indicatorId: item.indicatorId || null,
+        value: item.value || '',
+        referenceRange: item.referenceRange || '',
+        isNormal: item.isNormal !== undefined ? item.isNormal : null,
+        abnormalType: item.abnormalType || 'normal',
+        notes: item.notes || '',
+        ocrMatched: !!item.indicatorId,
+        ocrName: item.name || ''
+      });
+    }
+    setIndicatorData(prev => [...prev, ...newItems]);
+    const matched = newItems.filter(i => i.ocrMatched).length;
+    const unmatched = newItems.filter(i => !i.ocrMatched).length;
+    message.success(`识别出 ${newItems.length} 个指标（${matched} 个已匹配，${unmatched} 个待确认）`);
+  };
+
+  const handleCreateNewIndicator = async (rowId, indicatorInfo) => {
+    try {
+      const response = await ocrAPI.createIndicator({
+        name: indicatorInfo.name,
+        unit: indicatorInfo.unit || '',
+        type: indicatorInfo.type || '血液',
+        valueType: 'numeric',
+        normalMin: indicatorInfo.normalMin,
+        normalMax: indicatorInfo.normalMax,
+        referenceRange: indicatorInfo.normalMin && indicatorInfo.normalMax
+          ? `${indicatorInfo.normalMin}-${indicatorInfo.normalMax}`
+          : '',
+        isDefault: false
+      });
+      if (response.success && response.data) {
+        dispatch(fetchIndicators());
+        handleIndicatorChange(rowId, 'indicatorId', response.data.id);
+        message.success(`指标 "${indicatorInfo.name}" 创建成功`);
+      }
+    } catch (error) {
+      message.error(`创建指标失败: ${error.message}`);
+    }
+  };
+
   const handleSubmit = async (values) => {
     try {
-      const filteredIndicatorData = indicatorData.filter(item => 
-        item.indicatorId !== null && 
+      const filteredIndicatorData = indicatorData.filter(item =>
+        item.indicatorId !== null &&
         item.indicatorId !== undefined &&
-        item.value !== undefined && 
+        item.value !== undefined &&
         item.value !== '' &&
         item.value !== null
       );
-      
+
       if (process.env.NODE_ENV !== 'production') {
         console.log('原始指标数据:', indicatorData);
         console.log('过滤后指标数据:', filteredIndicatorData);
       }
-      
+
       const reportData = {
         ...values,
         reportDate: values.reportDate.format('YYYY-MM-DD'),
         indicatorData: filteredIndicatorData,
-        pdfFile: fileList.length > 0 ? fileList[0] : null
+        reportFile: reportFile
       };
-      
+
       if (process.env.NODE_ENV !== 'production') console.log('提交的报告数据:', reportData);
-      
+
       await dispatch(updateReport({ id, data: reportData })).unwrap();
       message.success('报告更新成功');
       navigate(`/reports/${id}`);
@@ -198,43 +294,20 @@ const ReportEdit = () => {
     setIndicatorData(prevData => prevData.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
-        
+
         // 当检测值或指标ID变化时，自动判断异常状态
         if (field === 'value' || field === 'indicatorId') {
           const indicatorId = field === 'indicatorId' ? value : item.indicatorId;
           const testValue = field === 'value' ? value : item.value;
-          
+
           const abnormalStatus = checkAbnormalStatus(indicatorId, testValue);
           Object.assign(updatedItem, abnormalStatus);
         }
-        
+
         return updatedItem;
       }
       return item;
     }));
-  };
-
-  const uploadProps = {
-    name: 'file',
-    multiple: false,
-    fileList,
-    beforeUpload: (file) => {
-      const isPDF = file.type === 'application/pdf';
-      if (!isPDF) {
-        message.error('只能上传PDF文件!');
-        return false;
-      }
-      const isLt10M = file.size / 1024 / 1024 < 10;
-      if (!isLt10M) {
-        message.error('文件大小不能超过10MB!');
-        return false;
-      }
-      setFileList([file]);
-      return false; // 阻止自动上传
-    },
-    onRemove: () => {
-      setFileList([]);
-    }
   };
 
   const indicatorColumns = [
@@ -242,29 +315,64 @@ const ReportEdit = () => {
       title: '指标名称',
       dataIndex: 'indicatorId',
       key: 'indicatorId',
-      width: 200,
+      width: 240,
       render: (value, record) => (
-        <Select
-          placeholder="选择指标"
-          style={{ width: '100%' }}
-          value={value || undefined}
-          onChange={(val) => {
-            handleIndicatorChange(record.id, 'indicatorId', val);
-            const indicator = indicators.find(ind => ind.id === val);
-            if (indicator) {
-              handleIndicatorChange(record.id, 'referenceRange', indicator.referenceRange || '');
+        <Space direction="vertical" size={0} style={{ width: '100%' }}>
+          <Select
+            placeholder="选择指标"
+            style={{ width: '100%' }}
+            value={value || undefined}
+            status={record.ocrMatched === false && !value ? 'warning' : undefined}
+            onChange={(val) => {
+              handleIndicatorChange(record.id, 'indicatorId', val);
+              const indicator = indicators.find(ind => ind.id === val);
+              if (indicator) {
+                handleIndicatorChange(record.id, 'referenceRange', indicator.referenceRange || '');
+              }
+              setIndicatorData(prev => prev.map(item =>
+                item.id === record.id ? { ...item, ocrMatched: true } : item
+              ));
+              if (record.ocrName) {
+                ocrAPI.confirmMatch(val, record.ocrName).catch(() => {});
+              }
+            }}
+            showSearch
+            optionFilterProp="label"
+            filterOption={(input, option) =>
+              option?.label?.toLowerCase().indexOf(input.toLowerCase()) >= 0
             }
-          }}
-          showSearch
-          optionFilterProp="label"
-          filterOption={(input, option) =>
-            option?.label?.toLowerCase().indexOf(input.toLowerCase()) >= 0
-          }
-          options={indicators.map(indicator => ({
-            value: indicator.id,
-            label: `${indicator.name} (${indicator.unit})`
-          }))}
-        />
+            dropdownRender={(menu) => (
+              <>
+                {menu}
+                <Divider style={{ margin: '4px 0' }} />
+                <Button
+                  type="link"
+                  icon={<PlusOutlined />}
+                  style={{ padding: '4px 8px', width: '100%', textAlign: 'left' }}
+                  onClick={() => {
+                    Modal.confirm({
+                      title: '新建指标',
+                      content: `将创建指标 "${record.ocrName || '未命名'}"`,
+                      onOk: () => handleCreateNewIndicator(record.id, {
+                        name: record.ocrName || '',
+                        unit: record.ocrUnit || '',
+                      })
+                    });
+                  }}
+                >
+                  新建指标...
+                </Button>
+              </>
+            )}
+            options={indicators.map(indicator => ({
+              value: indicator.id,
+              label: `${indicator.name} (${indicator.unit})`
+            }))}
+          />
+          {record.ocrMatched === false && !value && (
+            <Tag color="orange" style={{ fontSize: 11 }}>待确认: {record.ocrName}</Tag>
+          )}
+        </Space>
       )
     },
     {
@@ -274,7 +382,7 @@ const ReportEdit = () => {
       width: 120,
       render: (value, record) => {
         const indicator = indicators.find(ind => ind.id === record.indicatorId);
-        
+
         if (indicator?.valueType === 'qualitative') {
           return (
             <Select
@@ -288,7 +396,7 @@ const ReportEdit = () => {
             </Select>
           );
         }
-        
+
         return (
           <Input
             placeholder="输入数值"
@@ -317,7 +425,7 @@ const ReportEdit = () => {
       width: 120,
       render: (_, record) => {
         const { isNormal, abnormalType } = record;
-        
+
         if (isNormal === true || abnormalType === 'normal') {
           return <Tag color="green">正常</Tag>;
         } else if (abnormalType === 'high') {
@@ -329,7 +437,7 @@ const ReportEdit = () => {
         } else if (isNormal === false) {
           return <Tag color="red">异常</Tag>;
         }
-        
+
         return <Tag color="default">未判断</Tag>;
       }
     },
@@ -392,7 +500,7 @@ const ReportEdit = () => {
   }
 
   return (
-    <div>
+    <div className="page-fade-in">
       <Card
         title={
           <Space>
@@ -469,29 +577,109 @@ const ReportEdit = () => {
             />
           </Form.Item>
 
-          <Divider>PDF文件上传</Divider>
-          <Form.Item label="报告PDF文件">
-            <Dragger {...uploadProps}>
-              <p className="ant-upload-drag-icon">
-                <InboxOutlined />
+          {/* Unified upload + auto OCR */}
+          <Divider>报告附件（上传新文件自动识别）</Divider>
+          <Form.Item label="报告文件">
+            {currentReport?.filePath && !reportFile && (
+              <div style={{
+                marginBottom: 12, padding: '10px 16px',
+                background: '#f0f9ff', borderRadius: 8,
+                border: '1px solid #bae6fd', color: '#334155'
+              }}>
+                <Space>
+                  <FileTextOutlined style={{ color: '#3b82f6' }} />
+                  <span>当前附件: {currentReport.fileName || '已上传文件'}</span>
+                  <Button size="small" type="link" onClick={() => setReportFile(null)}>
+                    保留
+                  </Button>
+                </Space>
+              </div>
+            )}
+            <Dragger
+              name="file"
+              multiple={false}
+              fileList={reportFile ? [{ uid: '-1', name: reportFile.name, status: 'done' }] : []}
+              beforeUpload={(file) => handleFileSelect(file)}
+              onRemove={() => {
+                setReportFile(null);
+                setOcrStatus('idle');
+              }}
+              accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf"
+              style={{
+                border: '2px dashed #3b82f6',
+                borderRadius: 12,
+                background: '#f0f9ff',
+                padding: '24px 16px'
+              }}
+            >
+              <p className="ant-upload-drag-icon" style={{ marginBottom: 12 }}>
+                <InboxOutlined style={{ fontSize: 48, color: '#3b82f6' }} />
               </p>
-              <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-              <p className="ant-upload-hint">
-                支持PDF格式，文件大小不超过10MB
+              <p className="ant-upload-text" style={{ fontSize: 16, fontWeight: 500, color: '#334155' }}>
+                点击或拖拽上传新报告文件
+              </p>
+              <p className="ant-upload-hint" style={{ color: '#64748b' }}>
+                替换现有附件，上传后自动识别指标
               </p>
             </Dragger>
           </Form.Item>
 
-          <Divider>
+          {/* OCR status bar */}
+          {ocrStatus !== 'idle' && (
+            <Alert
+              style={{ marginBottom: 16, borderRadius: 8 }}
+              type={ocrStatus === 'recognizing' ? 'info' : ocrStatus === 'success' ? 'success' : 'error'}
+              showIcon
+              icon={
+                ocrStatus === 'recognizing' ? <LoadingOutlined spin /> :
+                ocrStatus === 'success' ? <CheckCircleOutlined /> :
+                <CloseCircleOutlined />
+              }
+              message={
+                ocrStatus === 'recognizing' ? '正在识别报告内容...' :
+                ocrStatus === 'success' ? '识别完成' :
+                `识别失败: ${ocrError}`
+              }
+              description={
+                ocrStatus === 'success' ? (
+                  <Space size="small">
+                    <Button size="small" type="link" onClick={() => setShowRawText(!showRawText)}>
+                      {showRawText ? '隐藏原始文本' : '查看原始文本'}
+                    </Button>
+                    <Button size="small" type="link" icon={<RedoOutlined />}
+                      onClick={() => handleFileSelect(reportFile)}>
+                      重新识别
+                    </Button>
+                  </Space>
+                ) : ocrStatus === 'error' ? (
+                  <Button size="small" type="link" onClick={() => handleFileSelect(reportFile)}>
+                    重试
+                  </Button>
+                ) : null
+              }
+            />
+          )}
+          {showRawText && ocrRawText && (
+            <pre style={{
+              maxHeight: 200, overflow: 'auto', background: '#f8fafc',
+              padding: 16, borderRadius: 8, fontSize: 12, marginBottom: 16,
+              border: '1px solid #e2e8f0', color: '#475569', lineHeight: 1.6
+            }}>
+              {ocrRawText}
+            </pre>
+          )}
+
+          {/* Indicator table */}
+          <Divider style={{ marginTop: 32, marginBottom: 24 }}>
             <Space>
-              <span>指标数据</span>
+              <span style={{ fontSize: 15, fontWeight: 500, color: '#334155' }}>指标数据{indicatorData.length > 0 ? ` (${indicatorData.length} 项)` : ''}</span>
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
                 size="small"
                 onClick={handleAddIndicator}
               >
-                添加指标
+                手动添加
               </Button>
             </Space>
           </Divider>
@@ -506,7 +694,7 @@ const ReportEdit = () => {
             locale={{
               emptyText: (
                 <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <p>暂无指标数据</p>
+                  <p>暂无指标数据，请上传报告自动识别或手动添加</p>
                   <Button
                     type="dashed"
                     icon={<PlusOutlined />}

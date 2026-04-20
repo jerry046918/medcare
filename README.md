@@ -75,22 +75,36 @@ medcare/
 │   ├── scripts/             # 数据库初始化、迁移脚本
 │   ├── services/            # 业务逻辑、OCR 引擎
 │   └── uploads/             # 上传文件存储（gitignored）
+├── skills/                  # Agent 集成文档（CLI skill）
 ├── docker-compose.yml
 └── package.json             # 根级脚本入口
 ```
 
-## CLI 工具
+## Agent 集成
 
-MedCare 提供 `medcare` 命令行工具，支持脚本化和 Agent 驱动操作：
+MedCare 内置 CLI 工具，可以让 AI Agent（如 Claude Code、Cursor 等）通过命令行操作系统数据，实现自动化的报告录入和健康管理。
+
+### 快速上手
 
 ```bash
-# 安装
+# 1. 安装 CLI
 cd server && npm link
 
-# 登录
+# 2. 登录
 medcare login -s http://localhost:3001 -u <user> -p <password>
+```
 
-# 常用命令
+### 让 Agent 识别 MedCare 能力
+
+将 `skills/medcare-cli.md` 的内容提供给 Agent 即可。具体方式取决于你使用的 Agent 平台：
+
+- **Claude Code** — 将内容放入 `~/.claude/skills/medcare-cli/SKILL.md`
+- **Cursor / Windsurf** — 写入项目的 `.cursorrules` 或 `AGENTS.md`
+- **其他 Agent** — 作为系统提示或上下文注入
+
+### 常用命令示例
+
+```bash
 medcare members list
 medcare reports list --member <id>
 medcare reports ocr --file report.jpg
@@ -100,7 +114,7 @@ medcare indicators list --search "白细胞"
 medcare indicators add --name "新指标" --type "分类" --value-type numeric
 ```
 
-所有命令默认输出 JSON，追加 `--pretty` 可格式化输出。
+详细的命令参考和工作流说明见 [`skills/medcare-cli.md`](skills/medcare-cli.md)。
 
 ## API 概览
 

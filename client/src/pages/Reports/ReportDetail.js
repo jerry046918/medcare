@@ -14,7 +14,8 @@ import {
   Typography,
   Row,
   Col,
-  Statistic
+  Statistic,
+  message
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -50,10 +51,30 @@ const ReportDetail = () => {
     navigate(`/reports/${id}/edit`);
   };
 
-  const handleDownload = () => {
-    if (currentReport?.pdfPath) {
-      // 这里应该实现PDF下载逻辑
-      console.log('下载PDF:', currentReport.pdfPath);
+  const handleDownload = async () => {
+    if (currentReport?.filePath) {
+      const filename = currentReport.filePath.split('/').pop();
+      const token = localStorage.getItem('token');
+      try {
+        const response = await fetch(`/api/files/reports/${filename}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = currentReport.fileName || filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } else {
+          message.error('下载失败');
+        }
+      } catch (error) {
+        message.error('下载失败');
+      }
     }
   };
 
@@ -187,12 +208,12 @@ const ReportDetail = () => {
         }
         extra={
           <Space>
-            {currentReport.pdfPath && (
+            {currentReport.filePath && (
               <Button
                 icon={<DownloadOutlined />}
                 onClick={handleDownload}
               >
-                下载PDF
+                下载附件
               </Button>
             )}
             <Button
@@ -237,9 +258,9 @@ const ReportDetail = () => {
               <Descriptions.Item label="医生姓名" span={1}>
                 {currentReport.doctorName || '-'}
               </Descriptions.Item>
-              <Descriptions.Item label="PDF文件" span={1}>
-                <Tag color={currentReport.pdfPath ? 'blue' : 'default'}>
-                  {currentReport.pdfPath ? '已上传' : '无文件'}
+              <Descriptions.Item label="报告附件" span={1}>
+                <Tag color={currentReport.filePath ? 'blue' : 'default'}>
+                  {currentReport.filePath ? '已上传' : '无文件'}
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="创建时间" span={1}>

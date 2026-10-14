@@ -26,6 +26,8 @@ server/.env
 server/database/*.sqlite
 server/database/*.sqlite-journal
 server/database/*.sqlite-wal
+# migrate-v2 运行前的库备份(完整健康数据副本,严禁入库)
+server/database/*.v1-backup-*
 
 # Upload files
 uploads/

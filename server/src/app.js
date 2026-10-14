@@ -6,9 +6,9 @@ const { server: serverConfig } = require('./config');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const { errorHandler } = require('./middleware/errorHandler');
 
-// 路由（本 Task 仍指向旧 routes/，Task 3-5 逐个换为新结构）
+// 路由（members 已拆为新结构；其余仍指向旧 routes/，Task 3-4 逐个换）
 const authRoutes = require('../routes/auth');
-const familyMemberRoutes = require('../routes/familyMembers');
+const memberRoutes = require('./routes/members');
 const reportRoutes = require('../routes/reports');
 const indicatorRoutes = require('../routes/indicators');
 const medicationRoutes = require('../routes/medications');
@@ -44,7 +44,7 @@ function createApp() {
     });
   }
   app.use('/api/auth', authRoutes);
-  app.use('/api/family-members', familyMemberRoutes);
+  app.use('/api/family-members', memberRoutes); // Task 10 改为双路径
   app.use('/api/reports', reportRoutes);
   app.use('/api/indicators', indicatorRoutes);
   app.use('/api/medications', medicationRoutes);

@@ -19,13 +19,24 @@ function getTestApp() {
   }
   return appPromise;
 }
-// 注册首个管理员（旧版注册协议：username/password；Task 10 后更新为新协议）
-async function createAdmin() {
-  const app = await getTestApp();
-  const res = await request(app).post('/api/auth/register')
-    .send({ username: 'admin', password: 'pass123456' });
-  if (res.status !== 201) throw new Error(`createAdmin 失败: ${res.status} ${JSON.stringify(res.body)}`);
-  return { token: res.body.data.token, userId: res.body.data.user.id };
+// 注册首个管理员（旧版注册协议：username/password；Task 10 后更新为新协议）。
+// 注册仅允许首账户，而测试文件的多个用例都会调用本函数，故按用户名缓存成功结果；
+// 失败不缓存，下次调用会重试。
+const adminCache = new Map();
+function createAdmin(username = 'admin') {
+  if (!adminCache.has(username)) {
+    adminCache.set(username, (async () => {
+      const app = await getTestApp();
+      const res = await request(app).post('/api/auth/register')
+        .send({ username, password: 'pass123456' });
+      if (res.status !== 201) {
+        adminCache.delete(username);
+        throw new Error(`createAdmin 失败: ${res.status} ${JSON.stringify(res.body)}`);
+      }
+      return { token: res.body.data.token, userId: res.body.data.user.id };
+    })());
+  }
+  return adminCache.get(username);
 }
 function auth(agent, token) {
   return agent.set('Authorization', `Bearer ${token}`);

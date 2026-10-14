@@ -25,6 +25,16 @@ module.exports = (sequelize) => {
         notEmpty: true
       }
     },
+    role: {
+      type: DataTypes.ENUM('admin', 'member'),
+      allowNull: false,
+      defaultValue: 'member'
+    },
+    displayName: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      validate: { len: [0, 50] }
+    },
     createdAt: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW

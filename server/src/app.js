@@ -6,10 +6,10 @@ const { server: serverConfig } = require('./config');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const { errorHandler } = require('./middleware/errorHandler');
 
-// 路由（members 已拆为新结构；其余仍指向旧 routes/，Task 3-4 逐个换）
+// 路由（members/reports 已拆为新结构；其余仍指向旧 routes/，Task 4 逐个换）
 const authRoutes = require('../routes/auth');
 const memberRoutes = require('./routes/members');
-const reportRoutes = require('../routes/reports');
+const reportRoutes = require('./routes/reports');
 const indicatorRoutes = require('../routes/indicators');
 const medicationRoutes = require('../routes/medications');
 const medicalLogRoutes = require('../routes/medicalLogs');

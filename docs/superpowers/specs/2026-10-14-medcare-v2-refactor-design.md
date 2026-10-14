@@ -178,15 +178,18 @@ services 清单:
 | `/api/auth/login` | POST | 不变 | 公开 |
 | `/api/auth/me` | GET | **新**:返回账户 + role + 本成员信息 | 登录 |
 | `/api/auth/init-status` | GET | 不变(needsSetup = 无用户) | 公开 |
+| `/api/auth/preview-invite` | POST | **新**:注册前校验邀请码;专属码返回 `{ boundMember }`,通用码返回 `{ claimableMembers: [...] }`(无 self link 的成员) | 公开 |
+| `/api/auth/update-profile` | POST | **新**:修改自己的 `displayName` | 登录 |
 | `/api/members`(原 `/api/family-members`) | GET | 列表 = 当前用户可见成员,每项附 `role`/`relationship`(当前视角) | 登录 |
 | `/api/members` | POST | 创建成员(自动建 `owner` link) | 登录 |
 | `/api/members/:id` | GET/PUT/DELETE | 权限按矩阵(2.3) | 按矩阵 |
 | `/api/members/:id/links` | GET/POST | 查看授权列表;授权 `{granteeUserId, role: viewer/editor}` | self/owner/admin |
 | `/api/members/:id/links/:linkId` | DELETE | 撤销授权 | self/owner/admin |
 | `/api/members/merge` | POST | `{sourceId, targetId}` 合并重复成员 | admin |
+| `/api/members/bind-self` | POST | **新**:登录态补绑本人(迁移后无 self link 的老账户;规则同注册认领:`{mode, memberData? | claimMemberId?}`) | 登录且尚无 self |
 | `/api/invites` | GET/POST | 邀请码列表/创建(`maxUses`、`expiresAt`、`memberId` 可选) | admin |
 | `/api/invites/:id` | DELETE | 停用邀请码 | admin |
-| `/api/users` | GET | 账户列表(含 role、self 绑定) | admin |
+| `/api/users` | GET | 账户列表;登录即可(返回 id/username/displayName 基础字段,供授权选人),admin 额外获得 role/createdAt/selfMember | 登录 |
 | `/api/users/:id/role` | PUT | 切换 admin/member | admin |
 | `/api/reports` 等 | — | 路径不变,内部权限检查改走 accessService;列表接口校验各成员可见性 | 按矩阵 |
 | `/api/medications`、`/api/medical-logs` | — | 同上,权限检查改走 accessService | 按矩阵 |

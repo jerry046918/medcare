@@ -190,3 +190,28 @@ test('admin 可授 owner/self;self 仅当成员未绑定;grantee 不存在 400',
     .send({ granteeUserId: 9999999, role: 'viewer' });
   assert.strictEqual(noUser.status, 400);
 });
+
+// 控制器裁定:grantLink 的 relationship 与 create/update 同规,消毒后落库
+test('grantLink 的 relationship 消毒后落库,缺省为 家人', async () => {
+  const { app, admin } = await setup();
+  const owner = await makeUser(app, admin, 'sanOwner');
+  const created = await auth(request(app).post('/api/members'), owner.token)
+    .send({ name: '消毒对象', gender: '男', relationship: '父亲' });
+  const mid = created.body.data.id;
+  const v = await makeUser(app, admin, 'sanGrantee');
+  const w = await makeUser(app, admin, 'sanGrantee2');
+
+  const grant = await auth(request(app).post(`/api/members/${mid}/links`), owner.token)
+    .send({ granteeUserId: v.userId, role: 'viewer', relationship: '张三&<b>李四</b>' });
+  assert.strictEqual(grant.status, 201);
+  assert.strictEqual(grant.body.data.relationship, '张三&amp;李四');
+
+  const grantDefault = await auth(request(app).post(`/api/members/${mid}/links`), owner.token)
+    .send({ granteeUserId: w.userId, role: 'viewer' });
+  assert.strictEqual(grantDefault.status, 201);
+  assert.strictEqual(grantDefault.body.data.relationship, '家人');
+
+  const links = await auth(request(app).get(`/api/members/${mid}/links`), owner.token);
+  const link = links.body.data.find((l) => l.userId === v.userId);
+  assert.strictEqual(link.relationship, '张三&amp;李四');
+});

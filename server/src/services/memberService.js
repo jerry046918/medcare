@@ -209,7 +209,9 @@ async function grantLink(userId, memberId, { granteeUserId, role, relationship =
   }
   const existing = await UserMemberLink.findOne({ where: { userId: granteeUserId, memberId: id } });
   if (existing) throw new HttpError(409, '该用户已有此成员的授权');
-  return UserMemberLink.create({ userId: granteeUserId, memberId: id, role, relationship });
+  // relationship 与 create/update 同规:消毒后再落库(控制器裁定,偏离 brief 原文)
+  const cleanRel = escapeHtml(sanitizeInput(relationship, { maxLength: 20 }));
+  return UserMemberLink.create({ userId: granteeUserId, memberId: id, role, relationship: cleanRel });
 }
 
 // 撤销授权;role='self' 的 link 仅 admin 可删(解绑需管理员)
@@ -249,10 +251,10 @@ async function merge(userId, { sourceId, targetId }) {
           { userId: link.userId, memberId: targetId, role: link.role, relationship: link.relationship },
           { transaction: t });
       } else if (link.role === 'self') {
-        // target 已有绑定:保留 target 的 self,source 的降级 owner
+        // source 的 self link 用户:其在 target 上的低权 link 升为 self(同用户同成员唯一,原地更新);
+        // 若其在 target 已是 self 则保留现状,不动
         if (existing.role !== 'self') {
           await existing.update({ role: 'self', relationship: link.relationship }, { transaction: t });
-          // 原 self 用户在 target 上的其他角色冲突由唯一约束排除(同 userId 只一条 link)
         }
       } else if (ROLE_RANK[link.role] > ROLE_RANK[existing.role] && existing.role !== 'self') {
         await existing.update({ role: link.role, relationship: link.relationship }, { transaction: t });

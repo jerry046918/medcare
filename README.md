@@ -145,7 +145,7 @@ docker-compose up -d
 ```bash
 # 构建前端
 cd client && npm run build
-cp -r build ../server/public/
+cp -r dist ../server/public/
 
 # 配置环境变量
 cat > server/.env << 'EOF'

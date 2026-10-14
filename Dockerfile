@@ -77,7 +77,7 @@ COPY server/ ./
 COPY server/services/paddle_ocr_worker.py ./services/
 
 # Copy built frontend from frontend-builder stage
-COPY --from=frontend-builder /app/client/build ./public
+COPY --from=frontend-builder /app/client/dist ./public
 
 # Create necessary directories
 RUN mkdir -p uploads/ocr uploads/reports database

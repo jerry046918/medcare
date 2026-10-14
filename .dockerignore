@@ -4,7 +4,7 @@ client/node_modules/
 server/node_modules/
 
 # Build artifacts (we build inside Docker)
-client/build/
+client/dist/
 
 # Database files (use volume instead)
 server/database/*.sqlite

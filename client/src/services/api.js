@@ -26,7 +26,7 @@ const ErrorMessages = {
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || '/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 30000, // 增加到 30 秒，OCR 处理可能较慢
   headers: {
     'Content-Type': 'application/json',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -14,17 +14,12 @@ import {
   Divider,
   Row,
   Col,
-  Table,
-  Popconfirm,
   Spin,
-  Alert,
-  Modal,
-  Tag
+  Alert
 } from 'antd';
 import {
   ArrowLeftOutlined,
   PlusOutlined,
-  DeleteOutlined,
   InboxOutlined,
   LoadingOutlined,
   CheckCircleOutlined,
@@ -36,6 +31,7 @@ import dayjs from 'dayjs';
 import { fetchReportDetail, updateReport } from '../../store/slices/reportSlice';
 import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
 import { fetchIndicators } from '../../store/slices/indicatorSlice';
+import IndicatorEditTable, { newIndicatorRow, applyIndicatorChange, checkAbnormalStatus } from '../../components/common/IndicatorEditTable';
 import ocrAPI from '../../api/ocrAPI';
 
 const { Option } = Select;
@@ -59,48 +55,6 @@ const ReportEdit = () => {
   const [ocrError, setOcrError] = useState(null);
   const [ocrRawText, setOcrRawText] = useState('');
   const [showRawText, setShowRawText] = useState(false);
-
-  // 自动判断异常状态的函数
-  const checkAbnormalStatus = useCallback((indicatorId, value) => {
-    if (!indicatorId || !value || !indicators || indicators.length === 0) {
-      return { isNormal: null, abnormalType: null };
-    }
-
-    const indicator = indicators.find(ind => ind.id === indicatorId);
-    if (!indicator) {
-      return { isNormal: null, abnormalType: null };
-    }
-
-    // 定性指标判断
-    if (indicator.valueType === 'qualitative') {
-      if (indicator.normalValue) {
-        const isNormal = value === indicator.normalValue;
-        return {
-          isNormal,
-          abnormalType: isNormal ? 'normal' : 'abnormal'
-        };
-      }
-      return { isNormal: null, abnormalType: null };
-    }
-
-    // 数值型指标判断
-    if (indicator.valueType === 'numeric' && indicator.normalMin !== null && indicator.normalMax !== null) {
-      const numValue = parseFloat(value);
-      if (isNaN(numValue)) {
-        return { isNormal: null, abnormalType: null };
-      }
-
-      if (numValue >= indicator.normalMin && numValue <= indicator.normalMax) {
-        return { isNormal: true, abnormalType: 'normal' };
-      } else if (numValue > indicator.normalMax) {
-        return { isNormal: false, abnormalType: 'high' };
-      } else {
-        return { isNormal: false, abnormalType: 'low' };
-      }
-    }
-
-    return { isNormal: null, abnormalType: null };
-  }, [indicators]);
 
   useEffect(() => {
     if (id) {
@@ -148,7 +102,7 @@ const ReportEdit = () => {
         prevData.map(item => {
           // 如果没有异常状态信息或需要重新计算，自动计算
           if (item.indicatorId && item.value && (item.abnormalType === undefined || item.abnormalType === null)) {
-            const abnormalStatus = checkAbnormalStatus(item.indicatorId, item.value);
+            const abnormalStatus = checkAbnormalStatus(indicators, item.indicatorId, item.value);
             return { ...item, ...abnormalStatus };
           }
           return item;
@@ -233,7 +187,7 @@ const ReportEdit = () => {
       });
       if (response.success && response.data) {
         dispatch(fetchIndicators());
-        handleIndicatorChange(rowId, 'indicatorId', response.data.id);
+        setIndicatorData(prev => applyIndicatorChange(prev, indicators, rowId, 'indicatorId', response.data.id));
         message.success(`指标 "${indicatorInfo.name}" 创建成功`);
       }
     } catch (error) {
@@ -275,205 +229,8 @@ const ReportEdit = () => {
   };
 
   const handleAddIndicator = () => {
-    const newIndicator = {
-      id: Date.now(),
-      indicatorId: null,
-      value: '',
-      referenceRange: '',
-      isNormal: true,
-      notes: ''
-    };
-    setIndicatorData([...indicatorData, newIndicator]);
+    setIndicatorData([...indicatorData, newIndicatorRow()]);
   };
-
-  const handleRemoveIndicator = (id) => {
-    setIndicatorData(indicatorData.filter(item => item.id !== id));
-  };
-
-  const handleIndicatorChange = (id, field, value) => {
-    setIndicatorData(prevData => prevData.map(item => {
-      if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
-
-        // 当检测值或指标ID变化时，自动判断异常状态
-        if (field === 'value' || field === 'indicatorId') {
-          const indicatorId = field === 'indicatorId' ? value : item.indicatorId;
-          const testValue = field === 'value' ? value : item.value;
-
-          const abnormalStatus = checkAbnormalStatus(indicatorId, testValue);
-          Object.assign(updatedItem, abnormalStatus);
-        }
-
-        return updatedItem;
-      }
-      return item;
-    }));
-  };
-
-  const indicatorColumns = [
-    {
-      title: '指标名称',
-      dataIndex: 'indicatorId',
-      key: 'indicatorId',
-      width: 240,
-      render: (value, record) => (
-        <Space direction="vertical" size={0} style={{ width: '100%' }}>
-          <Select
-            placeholder="选择指标"
-            style={{ width: '100%' }}
-            value={value || undefined}
-            status={record.ocrMatched === false && !value ? 'warning' : undefined}
-            onChange={(val) => {
-              handleIndicatorChange(record.id, 'indicatorId', val);
-              const indicator = indicators.find(ind => ind.id === val);
-              if (indicator) {
-                handleIndicatorChange(record.id, 'referenceRange', indicator.referenceRange || '');
-              }
-              setIndicatorData(prev => prev.map(item =>
-                item.id === record.id ? { ...item, ocrMatched: true } : item
-              ));
-              if (record.ocrName) {
-                ocrAPI.confirmMatch(val, record.ocrName).catch(() => {});
-              }
-            }}
-            showSearch
-            optionFilterProp="label"
-            filterOption={(input, option) =>
-              option?.label?.toLowerCase().indexOf(input.toLowerCase()) >= 0
-            }
-            dropdownRender={(menu) => (
-              <>
-                {menu}
-                <Divider style={{ margin: '4px 0' }} />
-                <Button
-                  type="link"
-                  icon={<PlusOutlined />}
-                  style={{ padding: '4px 8px', width: '100%', textAlign: 'left' }}
-                  onClick={() => {
-                    Modal.confirm({
-                      title: '新建指标',
-                      content: `将创建指标 "${record.ocrName || '未命名'}"`,
-                      onOk: () => handleCreateNewIndicator(record.id, {
-                        name: record.ocrName || '',
-                        unit: record.ocrUnit || '',
-                      })
-                    });
-                  }}
-                >
-                  新建指标...
-                </Button>
-              </>
-            )}
-            options={indicators.map(indicator => ({
-              value: indicator.id,
-              label: `${indicator.name} (${indicator.unit})`
-            }))}
-          />
-          {record.ocrMatched === false && !value && (
-            <Tag color="orange" style={{ fontSize: 11 }}>待确认: {record.ocrName}</Tag>
-          )}
-        </Space>
-      )
-    },
-    {
-      title: '检测值',
-      dataIndex: 'value',
-      key: 'value',
-      width: 120,
-      render: (value, record) => {
-        const indicator = indicators.find(ind => ind.id === record.indicatorId);
-
-        if (indicator?.valueType === 'qualitative') {
-          return (
-            <Select
-              placeholder="选择结果"
-              value={value}
-              onChange={(val) => handleIndicatorChange(record.id, 'value', val)}
-              style={{ width: '100%' }}
-            >
-              <Option value="positive">阳性</Option>
-              <Option value="negative">阴性</Option>
-            </Select>
-          );
-        }
-
-        return (
-          <Input
-            placeholder="输入数值"
-            value={value}
-            onChange={(e) => handleIndicatorChange(record.id, 'value', e.target.value)}
-          />
-        );
-      }
-    },
-    {
-      title: '参考范围',
-      dataIndex: 'referenceRange',
-      key: 'referenceRange',
-      width: 150,
-      render: (value, record) => (
-        <Input
-          placeholder="如: 3.9-6.1"
-          value={value}
-          onChange={(e) => handleIndicatorChange(record.id, 'referenceRange', e.target.value)}
-        />
-      )
-    },
-    {
-      title: '状态',
-      key: 'status',
-      width: 120,
-      render: (_, record) => {
-        const { isNormal, abnormalType } = record;
-
-        if (isNormal === true || abnormalType === 'normal') {
-          return <Tag color="green">正常</Tag>;
-        } else if (abnormalType === 'high') {
-          return <Tag color="red">偏高</Tag>;
-        } else if (abnormalType === 'low') {
-          return <Tag color="orange">偏低</Tag>;
-        } else if (abnormalType === 'abnormal') {
-          return <Tag color="red">异常</Tag>;
-        } else if (isNormal === false) {
-          return <Tag color="red">异常</Tag>;
-        }
-
-        return <Tag color="default">未判断</Tag>;
-      }
-    },
-    {
-      title: '备注',
-      dataIndex: 'notes',
-      key: 'notes',
-      render: (value, record) => (
-        <Input
-          placeholder="备注信息"
-          value={value}
-          onChange={(e) => handleIndicatorChange(record.id, 'notes', e.target.value)}
-        />
-      )
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 80,
-      render: (_, record) => (
-        <Popconfirm
-          title="确定删除这个指标吗？"
-          onConfirm={() => handleRemoveIndicator(record.id)}
-          okText="确定"
-          cancelText="取消"
-        >
-          <Button
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            size="small"
-          />
-        </Popconfirm>
-      )
-    }
-  ];
 
   if (isLoading) {
     return (
@@ -684,27 +441,13 @@ const ReportEdit = () => {
             </Space>
           </Divider>
 
-          <Table
-            columns={indicatorColumns}
-            dataSource={indicatorData}
-            rowKey="id"
-            pagination={false}
-            size="small"
+          <IndicatorEditTable
+            indicators={indicators}
+            value={indicatorData}
+            onChange={setIndicatorData}
+            onCreateIndicator={handleCreateNewIndicator}
+            onAddRow={handleAddIndicator}
             style={{ marginBottom: 24 }}
-            locale={{
-              emptyText: (
-                <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <p>暂无指标数据，请上传报告自动识别或手动添加</p>
-                  <Button
-                    type="dashed"
-                    icon={<PlusOutlined />}
-                    onClick={handleAddIndicator}
-                  >
-                    添加第一个指标
-                  </Button>
-                </div>
-              )
-            }}
           />
 
           <Form.Item>

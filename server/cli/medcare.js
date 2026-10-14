@@ -105,10 +105,10 @@ const members = program.command('members').description('家庭成员管理');
 
 members
   .command('list')
-  .description('列出所有家庭成员')
+  .description('列出可见成员（含视角 role/relationship、reportCount）')
   .action(async () => {
     const api = getAxios();
-    const res = await api.get('/family-members');
+    const res = await api.get('/members');
     handleResponse(res, program.opts().pretty);
   });
 
@@ -117,7 +117,7 @@ members
   .description('获取家庭成员详情')
   .action(async (id) => {
     const api = getAxios();
-    const res = await api.get(`/family-members/${id}`);
+    const res = await api.get(`/members/${id}`);
     handleResponse(res, program.opts().pretty);
   });
 
@@ -142,7 +142,95 @@ members
     if (opts.height) data.height = parseFloat(opts.height);
     if (opts.weight) data.weight = parseFloat(opts.weight);
     if (opts.phone) data.phone = opts.phone;
-    const res = await api.post('/family-members', data);
+    const res = await api.post('/members', data);
+    handleResponse(res, program.opts().pretty);
+  });
+
+// ── Invites ─────────────────────────────────────────────────────
+
+const invites = program.command('invites').description('邀请码管理（admin）');
+
+invites
+  .command('create')
+  .description('生成邀请码')
+  .option('--member <id>', '绑定专属成员（注册时只能认领该成员）')
+  .option('--uses <n>', '可用次数', '1')
+  .option('--days <n>', '有效天数')
+  .action(async (opts) => {
+    const api = getAxios();
+    const data = { maxUses: parseInt(opts.uses, 10) || 1 };
+    if (opts.member) data.memberId = opts.member;
+    if (opts.days) data.expiresDays = parseInt(opts.days, 10);
+    const res = await api.post('/invites', data);
+    handleResponse(res, program.opts().pretty);
+  });
+
+invites
+  .command('list')
+  .description('列出邀请码（含创建人/专属成员/使用情况）')
+  .action(async () => {
+    const api = getAxios();
+    const res = await api.get('/invites');
+    handleResponse(res, program.opts().pretty);
+  });
+
+// ── Access ──────────────────────────────────────────────────────
+
+const access = program.command('access').description('成员授权管理');
+
+access
+  .command('grant')
+  .description('授权用户访问成员')
+  .requiredOption('--member <id>', '成员ID')
+  .requiredOption('--user <id>', '被授权用户ID')
+  .requiredOption('--role <role>', 'viewer 或 editor')
+  .option('--relationship <rel>', '视角关系', '家人')
+  .action(async (opts) => {
+    const api = getAxios();
+    const res = await api.post(`/members/${opts.member}/links`, {
+      granteeUserId: opts.user,
+      role: opts.role,
+      relationship: opts.relationship,
+    });
+    handleResponse(res, program.opts().pretty);
+  });
+
+access
+  .command('revoke')
+  .description('撤销授权（--member 提供成员上下文，按 link id 定位）')
+  .requiredOption('--member <id>', '成员ID')
+  .requiredOption('--link <id>', '授权记录ID')
+  .action(async (opts) => {
+    const api = getAxios();
+    const pretty = program.opts().pretty;
+    // 先 GET links 定位（link 不属于该成员时给出更友好的错误）
+    const list = await api.get(`/members/${opts.member}/links`);
+    if (list.status >= 400) {
+      handleResponse(list, pretty);
+      return;
+    }
+    const link = (list.data.data || []).find((l) => String(l.id) === String(opts.link));
+    if (!link) {
+      output({
+        error: `授权记录 ${opts.link} 不属于成员 ${opts.member}`,
+        availableLinks: (list.data.data || []).map((l) => ({ id: l.id, username: l.username, role: l.role })),
+      }, pretty);
+      process.exit(1);
+    }
+    const res = await api.delete(`/members/${opts.member}/links/${opts.link}`);
+    handleResponse(res, pretty);
+  });
+
+// ── Users ───────────────────────────────────────────────────────
+
+const users = program.command('users').description('用户管理');
+
+users
+  .command('list')
+  .description('列出用户（admin 额外返回 role/createdAt/selfMember）')
+  .action(async () => {
+    const api = getAxios();
+    const res = await api.get('/users');
     handleResponse(res, program.opts().pretty);
   });
 

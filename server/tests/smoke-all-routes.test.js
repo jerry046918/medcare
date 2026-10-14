@@ -27,7 +27,7 @@ test('indicators/hospitals/config/ocr 基本可用', async () => {
 test('medications/medicalLogs CRUD 最小路径', async () => {
   const app = await getTestApp();
   const { token } = await createAdmin();
-  const member = await auth(request(app).post('/api/family-members'), token)
+  const member = await auth(request(app).post('/api/members'), token)
     .send({ name: '用药对象', gender: '男', relationship: '儿子' });
   const mid = member.body.data.id;
   // POST 字段以旧路由实现为准：medications 必填 memberId+name（无 dosage 字段）；

@@ -46,7 +46,7 @@ test('通用码 + mode=create:新成员 + self link + me 返回', async () => {
 test('专属码 + mode=claim:认领指定成员;认领他人已绑定成员被拒', async () => {
   const { app, admin } = await setup();
   // admin 先建一个待认领成员
-  const m = await auth(request(app).post('/api/family-members'), admin.token)
+  const m = await auth(request(app).post('/api/members'), admin.token)
     .send({ name: '待认领爸', gender: '男', relationship: '父亲' });
   const inv = await inviteService.createInvite({ createdById: admin.userId, memberId: m.body.data.id });
   const res = await createUser('dad', { inviteCode: inv.code, mode: 'claim', claimMemberId: m.body.data.id });
@@ -61,7 +61,7 @@ test('专属码 + mode=claim:认领指定成员;认领他人已绑定成员被�
   assert.strictEqual(res2.status, 409);
 
   // 专属码认领别的成员 → 400
-  const other = await auth(request(app).post('/api/family-members'), admin.token)
+  const other = await auth(request(app).post('/api/members'), admin.token)
     .send({ name: '别人', gender: '女', relationship: '母亲' });
   const inv3 = await inviteService.createInvite({ createdById: admin.userId, memberId: other.body.data.id });
   const res3 = await createUser('user3', {
@@ -79,7 +79,7 @@ test('bind-self:老账户补绑', async () => {
   const uid = reg.body.data.user.id;
   await UserMemberLink.destroy({ where: { userId: uid, role: 'self' } });
   // 再补绑(claim 一个新成员)
-  const m = await auth(request(app).post('/api/family-members'), admin.token)
+  const m = await auth(request(app).post('/api/members'), admin.token)
     .send({ name: '补绑对象', gender: '男', relationship: '家人' });
   const res = await auth(request(app).post('/api/members/bind-self'), token)
     .send({ mode: 'claim', claimMemberId: m.body.data.id });

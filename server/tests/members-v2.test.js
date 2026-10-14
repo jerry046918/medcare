@@ -38,14 +38,14 @@ test('列表只含可见成员且带视角 role', async () => {
   assert.ok(adminList.body.data.length >= 2);
 });
 
-test('创建成员建立 owner link;旧路径别名可用', async () => {
+test('创建成员建立 owner link;旧路径别名已移除(Task 22)', async () => {
   const { app, admin } = await setup();
   const res = await auth(request(app).post('/api/members'), admin.token)
     .send({ name: '新成员', gender: '男', relationship: '父亲' });
   assert.strictEqual(res.status, 201);
+  // 旧别名挂载已删:命中 /api/* 404 兜底
   const alias = await auth(request(app).get('/api/family-members'), admin.token);
-  assert.strictEqual(alias.status, 200);
-  assert.ok(alias.body.data.some((m) => m.name === '新成员'));
+  assert.strictEqual(alias.status, 404);
 });
 
 test('删除:有 self link 拒绝;无报告可删', async () => {

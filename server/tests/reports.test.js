@@ -16,7 +16,7 @@ test.after(() => {
 async function setup() {
   const app = await getTestApp();
   const { token } = await createAdmin();
-  const member = await auth(request(app).post('/api/family-members'), token)
+  const member = await auth(request(app).post('/api/members'), token)
     .send({ name: '报告对象', gender: '女', relationship: '配偶' });
   assert.strictEqual(member.status, 201);
   return { app, token, memberId: member.body.data.id };

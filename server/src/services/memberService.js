@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { FamilyMember, UserMemberLink, User, MedicalReport, ReportIndicatorData, MedicalIndicator, Medication, MedicalLog, sequelize } = require('../models');
 const accessService = require('./accessService');
 const HttpError = require('../utils/httpError');
@@ -16,6 +17,17 @@ async function listByUser(userId) {
   });
   const countMap = new Map(counts.map((c) => [c.memberId, Number(c.get('count'))]));
   return members.map((m) => ({ ...m, reportCount: countMap.get(m.id) || 0 }));
+}
+
+// 可认领成员（无 self link）：设置页本人绑定认领下拉用；与 previewInvite 的通用码分支同语义
+async function listClaimable() {
+  const claimed = await UserMemberLink.findAll({ where: { role: 'self' }, attributes: ['memberId'] });
+  const claimedIds = claimed.map((l) => l.memberId);
+  return FamilyMember.findAll({
+    where: claimedIds.length ? { id: { [Op.notIn]: claimedIds } } : {},
+    attributes: ['id', 'name', 'gender', 'birthday'],
+    order: [['createdAt', 'DESC']]
+  });
 }
 
 // 单个成员详情（assertAccess view；reports/indicatorData include 形状沿用 v1）
@@ -276,4 +288,4 @@ async function merge(userId, { sourceId, targetId }) {
   });
 }
 
-module.exports = { listByUser, getById, create, update, remove, listLinks, grantLink, revokeLink, merge };
+module.exports = { listByUser, listClaimable, getById, create, update, remove, listLinks, grantLink, revokeLink, merge };

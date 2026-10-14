@@ -85,3 +85,36 @@ test('bind-self:老账户补绑', async () => {
     .send({ mode: 'claim', claimMemberId: m.body.data.id });
   assert.strictEqual(res.status, 200);
 });
+
+test('update-profile:改 displayName 后 /auth/me 反映;消毒截断;未登录 401', async () => {
+  const { app, admin } = await setup();
+  const inv = await inviteService.createInvite({ createdById: admin.userId });
+  const reg = await createUser('profile1', { inviteCode: inv.code, memberData: { name: '资人', gender: '男' } });
+  const token = reg.body.data.token;
+
+  const res = await auth(request(app).post('/api/auth/update-profile'), token)
+    .send({ displayName: '小明' });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.data.displayName, '小明');
+  assert.strictEqual(res.body.data.username, 'profile1');
+  assert.strictEqual(res.body.data.role, 'member');
+
+  // 消毒 + 截断到 50(HTML 标签转义,长度钳制)
+  const long = await auth(request(app).post('/api/auth/update-profile'), token)
+    .send({ displayName: `<b>昵</b>${'称'.repeat(60)}` });
+  assert.strictEqual(long.status, 200);
+  assert.ok(long.body.data.displayName.length <= 50);
+  assert.ok(!long.body.data.displayName.includes('<b>'));
+
+  // /auth/me 反映新 displayName
+  const me = await auth(request(app).get('/api/auth/me'), token);
+  assert.strictEqual(me.status, 200);
+  assert.strictEqual(me.body.data.user.displayName, long.body.data.displayName);
+
+  // 空值 → 400;未登录 → 401
+  const empty = await auth(request(app).post('/api/auth/update-profile'), token)
+    .send({ displayName: '   ' });
+  assert.strictEqual(empty.status, 400);
+  const anon = await request(app).post('/api/auth/update-profile').send({ displayName: '匿名' });
+  assert.strictEqual(anon.status, 401);
+});

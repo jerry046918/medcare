@@ -60,3 +60,35 @@ test('删除:有 self link 拒绝;无报告可删', async () => {
   const del = await auth(request(app).delete(`/api/members/${created.body.data.id}`), u.token);
   assert.strictEqual(del.status, 200);
 });
+
+test('?claimable=1 返回无 self link 的成员(仅基础字段)', async () => {
+  const { app, admin } = await setup();
+  const u = await makeUser(app, admin, 'claimable1');
+  // admin 再建两个待认领成员(u 的本人成员已有 self link,不应出现)
+  await auth(request(app).post('/api/members'), admin.token)
+    .send({ name: '待认领A', gender: '女', relationship: '女儿' });
+  await auth(request(app).post('/api/members'), admin.token)
+    .send({ name: '待认领B', gender: '男', relationship: '父亲' });
+  const res = await auth(request(app).get('/api/members?claimable=1'), u.token);
+  assert.strictEqual(res.status, 200);
+  const names = res.body.data.map((m) => m.name);
+  assert.ok(names.includes('待认领A') && names.includes('待认领B'));
+  assert.ok(!names.includes('claimable1本人'));
+  for (const item of res.body.data) {
+    assert.deepStrictEqual(Object.keys(item).sort(), ['birthday', 'gender', 'id', 'name']);
+  }
+  // 已有 self 的账户补绑 → 400 先拒;摘除 self 后认领待认领成员 → 200,且其后不再出现在 claimable 列表
+  const target = res.body.data.find((m) => m.name === '待认领A');
+  const bind = await auth(request(app).post('/api/members/bind-self'), u.token)
+    .send({ mode: 'claim', claimMemberId: target.id });
+  assert.strictEqual(bind.status, 400);
+  const legacy2 = await makeUser(app, admin, 'claimable2');
+  const { UserMemberLink } = require('../src/models');
+  await UserMemberLink.destroy({ where: { userId: legacy2.userId, role: 'self' } });
+  const bind2 = await auth(request(app).post('/api/members/bind-self'), legacy2.token)
+    .send({ mode: 'claim', claimMemberId: target.id });
+  assert.strictEqual(bind2.status, 200);
+  const again = await auth(request(app).get('/api/members?claimable=1'), u.token);
+  assert.ok(!again.body.data.some((m) => m.id === target.id));
+  assert.ok(again.body.data.some((m) => m.name === '待认领B'));
+});

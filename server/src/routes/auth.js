@@ -12,4 +12,6 @@ router.get('/me', authenticateToken, c.me);
 router.get('/verify', c.verify);
 router.get('/init-status', c.initStatus);
 router.post('/change-password', authenticateToken, c.changePassword);
+// 更新个人资料（v2：displayName）
+router.post('/update-profile', authenticateToken, c.updateProfile);
 module.exports = router;

@@ -6,6 +6,7 @@ const inviteService = require('../services/inviteService');
 const { jwt: jwtConfig } = require('../config');
 const { User, sequelize, FamilyMember, UserMemberLink } = require('../models');
 const HttpError = require('../utils/httpError');
+const { sanitizeInput, escapeHtml } = require('../utils/security');
 
 // 注册（v2）：首账户免邀请码直接成为 admin；后续账户必须持有效邀请码，
 // 并在同一事务内绑定本人成员（mode=create 新建 / mode=claim 认领）、原子消费邀请码。
@@ -75,6 +76,22 @@ exports.initStatus = asyncHandler(async (req, res) => {
 exports.changePassword = asyncHandler(async (req, res) => {
   const { status, body } = await authService.changePassword(req.user.id, req.body);
   res.status(status).json(body);
+});
+
+// 更新个人资料（v2）：登录态仅允许修改自己的 displayName；
+// 消毒 + 截断到 50（与 User.displayName 列约束一致），返回更新后的用户基础字段
+exports.updateProfile = asyncHandler(async (req, res) => {
+  const { displayName } = req.body;
+  const clean = escapeHtml(sanitizeInput(String(displayName ?? ''), { maxLength: 50 }));
+  if (!clean) throw new HttpError(400, 'displayName 不能为空');
+  const user = await User.findByPk(req.user.id);
+  if (!user) throw new HttpError(401, '用户不存在');
+  await user.update({ displayName: clean });
+  res.json({
+    success: true,
+    message: '资料已更新',
+    data: { id: user.id, username: user.username, displayName: user.displayName, role: user.role }
+  });
 });
 
 exports.previewInvite = asyncHandler(async (req, res) => {

@@ -23,7 +23,7 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
 // JWT 配置
 const jwtConfig = {
   secret: process.env.JWT_SECRET || (isDevelopment ? 'medcare_dev_secret_key_change_in_production' : null),
-  expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  expiresIn: process.env.JWT_EXPIRES_IN || '30d'
 };
 
 // 如果生产环境没有设置 JWT_SECRET，抛出错误

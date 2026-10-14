@@ -1,16 +1,59 @@
 const Sequelize = require('sequelize');
+const jwt = require('jsonwebtoken');
 const asyncHandler = require('../utils/asyncHandler');
 const authService = require('../services/authService');
 const inviteService = require('../services/inviteService');
-const { FamilyMember, UserMemberLink } = require('../models');
+const { jwt: jwtConfig } = require('../config');
+const { User, sequelize, FamilyMember, UserMemberLink } = require('../models');
+const HttpError = require('../utils/httpError');
 
+// 注册（v2）：首账户免邀请码直接成为 admin；后续账户必须持有效邀请码，
+// 并在同一事务内绑定本人成员（mode=create 新建 / mode=claim 认领）、原子消费邀请码。
 exports.register = asyncHandler(async (req, res) => {
-  const { status, body } = await authService.register(req.body);
-  res.status(status).json(body);
+  let { username, password, inviteCode, mode, memberData = {}, claimMemberId } = req.body;
+
+  // 现有 username/password 消毒与校验原样沿用（格式/长度），不合规直接 400
+  ({ username, password } = authService.validateCredentials(req.body));
+
+  const { user, token, isFirst } = await sequelize.transaction(async (t) => {
+    const userCount = await User.count({ transaction: t });
+    let role = 'member';
+    if (userCount === 0) {
+      role = 'admin'; // 首个账户免邀请码
+    } else if (!inviteCode) {
+      throw new HttpError(400, '需要邀请码');
+    }
+    if (inviteCode) await inviteService.validateInvite(inviteCode); // 先校验，消费放最后
+
+    // 用户名唯一沿用旧实现（避免撞唯一约束落成 500）
+    const existingUser = await User.findOne({ where: { username }, transaction: t });
+    if (existingUser) throw new HttpError(400, '用户名已存在');
+
+    const created = await User.create({ username, password, role }, { transaction: t });
+    await authService.bindSelfForUser(created.id, { mode, memberData, claimMemberId, inviteCode, transaction: t });
+    if (inviteCode) await inviteService.consumeInvite(inviteCode, t); // 原子消费（条件更新防超发）
+
+    const signed = jwt.sign({ id: created.id, username: created.username }, jwtConfig.secret, { expiresIn: jwtConfig.expiresIn });
+    return { user: created, token: signed, isFirst: userCount === 0 };
+  });
+
+  res.status(201).json({
+    success: true,
+    message: isFirst ? '管理员账户创建成功' : '注册成功',
+    data: {
+      user: { id: user.id, username: user.username, displayName: user.displayName ?? null, role: user.role },
+      token
+    }
+  });
 });
 
 exports.login = asyncHandler(async (req, res) => {
   const { status, body } = await authService.login(req.body);
+  res.status(status).json(body);
+});
+
+exports.me = asyncHandler(async (req, res) => {
+  const { status, body } = await authService.me(req.user.id);
   res.status(status).json(body);
 });
 

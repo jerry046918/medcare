@@ -45,6 +45,7 @@ function createApp() {
   }
   app.use('/api/auth', authRoutes);
   app.use('/api/family-members', memberRoutes); // Task 10 改为双路径
+  app.use('/api/members', memberRoutes); // v2 双路径：/api/members/bind-self 等新端点先行可用
   app.use('/api/reports', reportRoutes);
   app.use('/api/indicators', indicatorRoutes);
   app.use('/api/medications', medicationRoutes);

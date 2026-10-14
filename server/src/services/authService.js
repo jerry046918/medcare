@@ -1,103 +1,91 @@
 const jwt = require('jsonwebtoken');
-const { User, sequelize } = require('../models');
+const { User, FamilyMember, UserMemberLink, sequelize } = require('../models');
 const { jwt: jwtConfig } = require('../config');
-const { sanitizeInput } = require('../utils/security');
+const { sanitizeInput, escapeHtml, validateDate } = require('../utils/security');
+const HttpError = require('../utils/httpError');
+const inviteService = require('./inviteService');
+const accessService = require('./accessService');
 
-// 说明：auth 逻辑自旧 routes/auth.js 原样迁移（register 仍仅限首账户，含事务+行锁防并发注册），
-// 响应仍由 service 以 { status, body } 形式给出以保留原有分支语义；Task 9 将整体重写。
+// 说明：注册主体逻辑（事务、邀请码、首账户 admin）自 Task 9 起移至 authController.register，
+// 本 service 保留凭据校验/消毒（validateCredentials）、绑定本人成员（bindSelfForUser）
+// 及登录/验证/改密等分支语义（仍以 { status, body } 形式给出以保留原有分支）。
 
-// 用户注册（仅限首次使用）— 使用事务防止并发注册竞态
-async function register(body) {
-  const transaction = await sequelize.transaction();
-  const fail = async (status, message) => {
-    await transaction.rollback();
-    return { status, body: { success: false, message } };
-  };
-  try {
-    let { username, password } = body;
+// 注册凭据消毒 + 校验（沿用旧 register 的规则与文案，不合规抛 400）
+function validateCredentials(body) {
+  let { username, password } = body;
 
-    // 输入消毒
-    username = sanitizeInput(username, { maxLength: 50 });
-    password = sanitizeInput(password, { maxLength: 100, stripTags: false });
+  // 输入消毒
+  username = sanitizeInput(username, { maxLength: 50 });
+  password = sanitizeInput(password, { maxLength: 100, stripTags: false });
 
-    // 验证输入
-    if (!username || !password) {
-      return await fail(400, '用户名和密码不能为空');
-    }
-
-    // 用户名格式验证
-    const usernameRegex = /^[a-zA-Z0-9_\u4e00-\u9fa5]+$/;
-    if (!usernameRegex.test(username)) {
-      return await fail(400, '用户名只能包含字母、数字、下划线和中文');
-    }
-
-    if (username.length < 2 || username.length > 50) {
-      return await fail(400, '用户名长度需要在2-50个字符之间');
-    }
-
-    if (password.length < 6) {
-      return await fail(400, '密码长度至少为6位');
-    }
-
-    if (password.length > 100) {
-      return await fail(400, '密码长度不能超过100位');
-    }
-
-    // 使用行锁检查是否已有用户（防止并发注册竞态条件）
-    const existingUsers = await User.findAll({
-      attributes: ['id'],
-      lock: true,
-      transaction
-    });
-
-    if (existingUsers.length > 0) {
-      return await fail(400, '系统已有管理员用户，无法重复注册');
-    }
-
-    // 检查用户名是否已存在
-    const existingUser = await User.findOne({
-      where: { username },
-      transaction
-    });
-    if (existingUser) {
-      return await fail(400, '用户名已存在');
-    }
-
-    // 创建用户
-    const user = await User.create({ username, password }, { transaction });
-
-    // 生成JWT token
-    const token = jwt.sign(
-      { id: user.id, username: user.username },
-      jwtConfig.secret,
-      { expiresIn: jwtConfig.expiresIn }
-    );
-
-    await transaction.commit();
-
-    return {
-      status: 201,
-      body: {
-        success: true,
-        message: '管理员账户创建成功',
-        data: {
-          user: {
-            id: user.id,
-            username: user.username,
-            createdAt: user.createdAt
-          },
-          token
-        }
-      }
-    };
-  } catch (error) {
-    await transaction.rollback().catch(() => {});
-    console.error('注册失败:', error);
-    const message = process.env.NODE_ENV === 'production'
-      ? '注册失败，请稍后重试'
-      : `注册失败: ${error.message}`;
-    return { status: 500, body: { success: false, message } };
+  // 验证输入
+  if (!username || !password) {
+    throw new HttpError(400, '用户名和密码不能为空');
   }
+
+  // 用户名格式验证
+  const usernameRegex = /^[a-zA-Z0-9_\u4e00-\u9fa5]+$/;
+  if (!usernameRegex.test(username)) {
+    throw new HttpError(400, '用户名只能包含字母、数字、下划线和中文');
+  }
+
+  if (username.length < 2 || username.length > 50) {
+    throw new HttpError(400, '用户名长度需要在2-50个字符之间');
+  }
+
+  if (password.length < 6) {
+    throw new HttpError(400, '密码长度至少为6位');
+  }
+
+  if (password.length > 100) {
+    throw new HttpError(400, '密码长度不能超过100位');
+  }
+
+  return { username, password };
+}
+
+// 为账户绑定本人成员（注册时与 POST /api/members/bind-self 复用）。
+// mode=create：按 memberData 新建本人成员；mode=claim：认领既有成员。
+// 已有 self link → 400；认领不存在成员 → 404；认领已被绑定成员 → 409；
+// 专属邀请码与认领成员不匹配 → 400。需在调用方事务内执行（transaction 透传）。
+async function bindSelfForUser(userId, { mode = 'create', memberData = {}, claimMemberId = null, inviteCode = null, transaction } = {}) {
+  memberData = memberData || {}; // 调用方可能显式传 null
+
+  // 已有 self 则拒绝
+  const existing = await UserMemberLink.findOne({ where: { userId, role: 'self' }, transaction });
+  if (existing) throw new HttpError(400, '该账户已绑定本人信息');
+
+  let memberId;
+  if (mode === 'claim') {
+    if (!claimMemberId) throw new HttpError(400, '缺少要认领的成员ID');
+    const member = await FamilyMember.findByPk(claimMemberId, { transaction });
+    if (!member) throw new HttpError(404, '要认领的成员不存在');
+    // 专属码与认领成员不匹配(400)先于已被绑定(409)判定——错误码优先级以规格测试为准
+    if (inviteCode) {
+      const invite = await inviteService.validateInvite(inviteCode);
+      if (invite.memberId && invite.memberId !== claimMemberId) {
+        throw new HttpError(400, '该邀请码只能绑定指定成员');
+      }
+    }
+    const claimed = await UserMemberLink.findOne({ where: { memberId: claimMemberId, role: 'self' }, transaction });
+    if (claimed) throw new HttpError(409, '该成员已被其他账户绑定');
+    memberId = claimMemberId;
+  } else {
+    const { name, gender, birthday } = memberData;
+    const cleanName = escapeHtml(sanitizeInput(name, { maxLength: 50 }));
+    if (!cleanName || !['男', '女', '其他'].includes(gender)) {
+      throw new HttpError(400, '本人姓名和性别为必填字段');
+    }
+    if (birthday && !validateDate(birthday)) throw new HttpError(400, '无效的生日日期');
+    // relationship 为旧 schema 必填列（v2 迁移不改约束），本人成员固定写 '本人'
+    const member = await FamilyMember.create(
+      { name: cleanName, gender, birthday: birthday || null, relationship: '本人' }, { transaction });
+    memberId = member.id;
+  }
+
+  await UserMemberLink.create(
+    { userId, memberId, role: 'self', relationship: '本人' }, { transaction });
+  return memberId;
 }
 
 // 用户登录
@@ -134,6 +122,8 @@ async function login(body) {
       { expiresIn: jwtConfig.expiresIn }
     );
 
+    const selfMember = await accessService.getSelfMember(user.id);
+
     return {
       status: 200,
       body: {
@@ -143,8 +133,10 @@ async function login(body) {
           user: {
             id: user.id,
             username: user.username,
-            createdAt: user.createdAt
+            displayName: user.displayName,
+            role: user.role
           },
+          selfMember,
           token
         }
       }
@@ -154,6 +146,38 @@ async function login(body) {
     const message = process.env.NODE_ENV === 'production'
       ? '登录失败，请稍后重试'
       : `登录失败: ${error.message}`;
+    return { status: 500, body: { success: false, message } };
+  }
+}
+
+// 当前登录用户信息 + 本人成员
+async function me(userId) {
+  try {
+    const user = await User.findByPk(userId, { attributes: ['id', 'username', 'displayName', 'role'] });
+    if (!user) {
+      return { status: 401, body: { success: false, message: '用户不存在' } };
+    }
+    const selfMember = await accessService.getSelfMember(userId);
+    return {
+      status: 200,
+      body: {
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            role: user.role
+          },
+          selfMember
+        }
+      }
+    };
+  } catch (error) {
+    console.error('获取用户信息失败:', error);
+    const message = process.env.NODE_ENV === 'production'
+      ? '获取用户信息失败，请稍后重试'
+      : `获取用户信息失败: ${error.message}`;
     return { status: 500, body: { success: false, message } };
   }
 }
@@ -260,4 +284,4 @@ async function changePassword(userId, body) {
   }
 }
 
-module.exports = { register, login, verify, initStatus, changePassword };
+module.exports = { validateCredentials, bindSelfForUser, login, me, verify, initStatus, changePassword };

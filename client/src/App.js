@@ -4,7 +4,7 @@ import { Layout, Spin, message } from 'antd';
 import { useDispatch, useSelector } from 'react-redux';
 import { checkAuthStatus, handleAuthExpired, clearLogoutReason } from './store/slices/authSlice';
 import ErrorBoundary from './components/ErrorBoundary';
-import MainLayout from './components/Layout/MainLayout';
+import AppLayout from './components/layout/AppLayout';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import Dashboard from './pages/Dashboard/Dashboard';
@@ -13,6 +13,7 @@ import FamilyMemberDetail from './pages/FamilyMembers/FamilyMemberDetail';
 import FamilyMemberEdit from './pages/FamilyMembers/FamilyMemberEdit';
 import Reports from './pages/Reports/Reports';
 import ReportUpload from './pages/Reports/ReportUpload';
+import QuickUpload from './pages/Reports/QuickUpload';
 import ReportDetail from './pages/Reports/ReportDetail';
 import ReportEdit from './pages/Reports/ReportEdit';
 import Settings from './pages/Settings/Settings';
@@ -85,7 +86,7 @@ function App() {
   return (
     <ErrorBoundary>
     <Routes>
-      <Route path="/" element={<MainLayout />}>
+      <Route path="/" element={<AppLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="family-members" element={<FamilyMembers />} />
@@ -93,6 +94,7 @@ function App() {
         <Route path="family-members/:id/edit" element={<FamilyMemberEdit />} />
         <Route path="reports" element={<Reports />} />
         <Route path="reports/upload" element={<ReportUpload />} />
+        <Route path="upload/quick" element={<QuickUpload />} />
         <Route path="reports/:id/edit" element={<ReportEdit />} />
         <Route path="reports/:id" element={<ReportDetail />} />
         <Route path="settings" element={<Settings />} />

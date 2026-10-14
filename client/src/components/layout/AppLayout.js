@@ -24,6 +24,8 @@ import {
   BellOutlined
 } from '@ant-design/icons';
 import { logout } from '../../store/slices/authSlice';
+import useBreakpoint from '../../hooks/useBreakpoint';
+import MobileTabBar from './MobileTabBar';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -53,12 +55,13 @@ const getBreadcrumb = (pathname) => {
   return parts;
 };
 
-const MainLayout = () => {
+const AppLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useSelector(state => state.auth);
+  const { isMobile } = useBreakpoint();
 
   const handleLogout = () => {
     dispatch(logout());
@@ -120,6 +123,27 @@ const MainLayout = () => {
   };
 
   const breadcrumbs = getBreadcrumb(location.pathname);
+
+  if (isMobile) {
+    return (
+      <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+        <Header style={{ padding: '0 16px', background: '#fff', position: 'sticky', top: 0, zIndex: 9,
+                         height: 52, lineHeight: '52px', display: 'flex', alignItems: 'center',
+                         justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
+          <span style={{ fontWeight: 700, fontSize: 16 }}>MedCare</span>
+          <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <Avatar style={{ backgroundColor: '#3b82f6' }} size={30}>
+              {(user?.displayName || user?.username || '?').charAt(0).toUpperCase()}
+            </Avatar>
+          </Dropdown>
+        </Header>
+        <Content style={{ padding: 12, paddingBottom: 80, minHeight: 'calc(100vh - 52px)', overflow: 'auto' }}>
+          <Outlet />
+        </Content>
+        <MobileTabBar />
+      </Layout>
+    );
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -262,4 +286,4 @@ const MainLayout = () => {
   );
 };
 
-export default MainLayout;
+export default AppLayout;

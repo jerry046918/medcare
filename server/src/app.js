@@ -17,6 +17,8 @@ const hospitalRoutes = require('./routes/hospitals');
 const ocrRoutes = require('./routes/ocr');
 const configRoutes = require('./routes/config');
 const fileRoutes = require('./routes/files');
+const userRoutes = require('./routes/users');
+const inviteRoutes = require('./routes/invites');
 
 function createApp() {
   const app = express();
@@ -53,6 +55,8 @@ function createApp() {
   app.use('/api/hospitals', hospitalRoutes);
   app.use('/api/ocr', ocrRoutes);
   app.use('/api/config', configRoutes);
+  app.use('/api/users', userRoutes); // Task 12:用户管理(登录列表 + admin 改角色)
+  app.use('/api/invites', inviteRoutes); // Task 12:邀请码管理(admin)
   app.get('/api/health', (req, res) => res.json({ status: 'OK', message: '家庭医疗管理系统服务正常运行' }));
   app.use('/api/*', (req, res) => res.status(404).json({ success: false, message: '接口不存在' }));
   app.use(errorHandler);

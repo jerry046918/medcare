@@ -27,10 +27,13 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // 将用户信息添加到请求对象
+    // 将用户信息添加到请求对象（displayName/role 供 requireAdmin、usersController 等使用；
+    // role 每次从库中读取，改角色即时生效）
     req.user = {
       id: user.id,
-      username: user.username
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role
     };
 
     next();

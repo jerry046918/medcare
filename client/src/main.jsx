@@ -4,10 +4,13 @@ import { Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import { registerSW } from 'virtual:pwa-register';
 import 'antd/dist/reset.css';
 import './index.css';
 import App from './App';
 import { store } from './store';
+
+registerSW({ immediate: true });
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

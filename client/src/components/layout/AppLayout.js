@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { logout } from '../../store/slices/authSlice';
 import useBreakpoint from '../../hooks/useBreakpoint';
+import InstallPrompt from '../common/InstallPrompt';
 import MobileTabBar from './MobileTabBar';
 
 const { Header, Sider, Content } = Layout;
@@ -147,6 +148,8 @@ const AppLayout = () => {
           <Outlet />
         </Content>
         <MobileTabBar />
+        {/* PWA 安装引导(Modal 经 portal 渲染,两个布局分支各挂载一次) */}
+        <InstallPrompt />
       </Layout>
     );
   }
@@ -287,6 +290,8 @@ const AppLayout = () => {
             <Outlet />
           </div>
         </Content>
+        {/* PWA 安装引导(Modal 经 portal 渲染,两个布局分支各挂载一次) */}
+        <InstallPrompt />
       </Layout>
     </Layout>
   );

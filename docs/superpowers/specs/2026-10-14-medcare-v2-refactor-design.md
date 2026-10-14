@@ -95,7 +95,7 @@ MedCare 是家庭健康管理系统(Express + Sequelize + SQLite 后端,React 18
 | 上传/编辑/删除报告 | ✅ | ✅ | ✅ | ❌ | ✅ |
 | 编辑成员资料 | ✅ | ✅ | ❌ | ❌ | ✅ |
 | 删除成员 | ❌ | ✅ | ❌ | ❌ | ✅ |
-| 授权他人访问自己的成员 | — | ✅ | — | — | ✅(任意授权) |
+| 授权他人访问该成员 | ✅ | ✅ | — | — | ✅(任意授权) |
 | 生成/管理邀请码 | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 账户管理/角色切换 | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 成员合并 | ❌ | ❌ | ❌ | ❌ | ✅ |
@@ -116,14 +116,15 @@ MedCare 是家庭健康管理系统(Express + Sequelize + SQLite 后端,React 18
 - 进入系统的唯一途径是 admin 生成的邀请码,认领不设审批(唯一 self 约束兜底一人一次)
 - 通用码注册时,认领列表只展示无 self link 的成员
 
+- **首个账户(系统初始化)**:同样走两步流程(账号密码 + 绑定本人),免邀请码,自动获得 `admin` 角色
+
 **重复兜底**:若用户未认领而新建了重复成员,admin 使用「成员合并」工具(选定 source/target,将 source 的报告、指标数据、日志、links 迁移至 target,删除 source)。
 
 ### 2.5 授权操作
 
-- 用户可对自己为 `owner` 的成员,授权给其他账户 `viewer` / `editor`
-- admin 可对任意成员设置任意授权(含 owner)
+- 对某成员持有 `self` 或 `owner` link 的用户,可将该成员授权给其他账户,角色限 `viewer` / `editor`
+- admin 可对任意成员设置任意授权(含 `owner`,含转移 `self` 绑定用于纠错/换绑)
 - 撤销授权 = 删除对应 link
-- admin 可调整任何 link(含转移 self 绑定,用于纠错/换绑)
 
 ## 3. 后端设计
 
@@ -180,8 +181,8 @@ services 清单:
 | `/api/members`(原 `/api/family-members`) | GET | 列表 = 当前用户可见成员,每项附 `role`/`relationship`(当前视角) | 登录 |
 | `/api/members` | POST | 创建成员(自动建 `owner` link) | 登录 |
 | `/api/members/:id` | GET/PUT/DELETE | 权限按矩阵(2.3) | 按矩阵 |
-| `/api/members/:id/links` | GET/POST | 查看授权列表;授权 `{granteeUserId, role: viewer/editor}` | owner/admin |
-| `/api/members/:id/links/:linkId` | DELETE | 撤销授权 | owner/admin |
+| `/api/members/:id/links` | GET/POST | 查看授权列表;授权 `{granteeUserId, role: viewer/editor}` | self/owner/admin |
+| `/api/members/:id/links/:linkId` | DELETE | 撤销授权 | self/owner/admin |
 | `/api/members/merge` | POST | `{sourceId, targetId}` 合并重复成员 | admin |
 | `/api/invites` | GET/POST | 邀请码列表/创建(`maxUses`、`expiresAt`、`memberId` 可选) | admin |
 | `/api/invites/:id` | DELETE | 停用邀请码 | admin |

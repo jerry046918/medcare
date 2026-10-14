@@ -16,7 +16,7 @@ exports.bindSelf = asyncHandler(async (req, res) => {
 
 exports.list = asyncHandler(async (req, res) => {
   // ?claimable=1：无 self link 的可认领成员（本人绑定认领下拉用），与可见性列表分流
-  if (req.query.claimable) {
+  if (['1', 'true'].includes(String(req.query.claimable))) {
     const data = await memberService.listClaimable();
     return res.json({ success: true, data });
   }

@@ -111,10 +111,13 @@ test('update-profile:改 displayName 后 /auth/me 反映;消毒截断;未登录 
   assert.strictEqual(me.status, 200);
   assert.strictEqual(me.body.data.user.displayName, long.body.data.displayName);
 
-  // 空值 → 400;未登录 → 401
+  // 空值 → 400;实体展开越界 → 400(而非落库校验 500);未登录 → 401
   const empty = await auth(request(app).post('/api/auth/update-profile'), token)
     .send({ displayName: '   ' });
   assert.strictEqual(empty.status, 400);
+  const overflow = await auth(request(app).post('/api/auth/update-profile'), token)
+    .send({ displayName: `${'称'.repeat(49)}&` }); // 转义后 53 字符
+  assert.strictEqual(overflow.status, 400);
   const anon = await request(app).post('/api/auth/update-profile').send({ displayName: '匿名' });
   assert.strictEqual(anon.status, 401);
 });

@@ -79,11 +79,13 @@ exports.changePassword = asyncHandler(async (req, res) => {
 });
 
 // 更新个人资料（v2）：登录态仅允许修改自己的 displayName；
-// 消毒 + 截断到 50（与 User.displayName 列约束一致），返回更新后的用户基础字段
+// 消毒 + 限长 50（与 User.displayName 列约束一致；转义后复核长度，避免实体展开越界落 500），
+// 返回更新后的用户基础字段
 exports.updateProfile = asyncHandler(async (req, res) => {
   const { displayName } = req.body;
   const clean = escapeHtml(sanitizeInput(String(displayName ?? ''), { maxLength: 50 }));
   if (!clean) throw new HttpError(400, 'displayName 不能为空');
+  if (clean.length > 50) throw new HttpError(400, 'displayName 最长50个字符');
   const user = await User.findByPk(req.user.id);
   if (!user) throw new HttpError(401, '用户不存在');
   await user.update({ displayName: clean });

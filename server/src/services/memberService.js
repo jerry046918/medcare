@@ -259,9 +259,13 @@ async function merge(userId, { sourceId, targetId }) {
           { transaction: t });
       } else if (link.role === 'self') {
         // source 的 self link 用户:其在 target 上的低权 link 升为 self(同用户同成员唯一,原地更新);
-        // 若其在 target 已是 self 则保留现状,不动
+        // 若其在 target 已是 self 则保留现状,不动;
+        // 若 target 已有他人的 self link 则升级止步于 owner,保持"一成员至多一个 self"(Task 13 评审修正)
         if (existing.role !== 'self') {
-          await existing.update({ role: 'self', relationship: link.relationship }, { transaction: t });
+          const targetSelf = await UserMemberLink.findOne(
+            { where: { memberId: targetId, role: 'self' }, transaction: t });
+          await existing.update(
+            { role: targetSelf ? 'owner' : 'self', relationship: link.relationship }, { transaction: t });
         }
       } else if (ROLE_RANK[link.role] > ROLE_RANK[existing.role] && existing.role !== 'self') {
         await existing.update({ role: link.role, relationship: link.relationship }, { transaction: t });

@@ -194,6 +194,37 @@ test('merge:字符串同参 400;self link 迁移遇 target 已有他人 self 时
   assert.strictEqual(uLink.role, 'owner', 'source 的 self link 迁移时降级为 owner');
 });
 
+// Task 13 评审修正(升级分支):source 的 self link 用户在 target 已有低权 link,
+// 但 target 已有他人 self link 时,升级止步于 owner,不产生第二个 self
+test('merge:self 升级遇 target 已有他人 self 时降级为 owner', async () => {
+  const { app, admin } = await setup();
+  const u = await makeUser(app, admin, 'mrgUpU');
+  const w = await makeUser(app, admin, 'mrgUpW');
+  // target = w 的本人成员;w 授 u viewer
+  const wList = await auth(request(app).get('/api/members'), w.token);
+  const target = wList.body.data.find((m) => m.role === 'self');
+  const grant = await auth(request(app).post(`/api/members/${target.id}/links`), w.token)
+    .send({ granteeUserId: u.userId, role: 'viewer' });
+  assert.strictEqual(grant.status, 201);
+  // source = u 的本人成员(self link)
+  const uList = await auth(request(app).get('/api/members'), u.token);
+  const source = uList.body.data.find((m) => m.role === 'self');
+
+  const merged = await auth(request(app).post('/api/members/merge'), admin.token)
+    .send({ sourceId: source.id, targetId: target.id });
+  assert.strictEqual(merged.status, 200);
+
+  const links = await auth(request(app).get(`/api/members/${target.id}/links`), admin.token);
+  assert.strictEqual(links.status, 200);
+  const selfLinks = links.body.data.filter((l) => l.role === 'self');
+  assert.strictEqual(selfLinks.length, 1, 'target 仍只有一个 self link');
+  assert.strictEqual(selfLinks[0].userId, w.userId, 'self 归属 w');
+  const uLink = links.body.data.find((l) => l.userId === u.userId);
+  assert.strictEqual(uLink.role, 'owner', 'u 的升级止步于 owner');
+  const srcGone = await auth(request(app).get(`/api/members/${source.id}`), u.token);
+  assert.strictEqual(srcGone.status, 404);
+});
+
 // admin 授权矩阵:可授任意角色;self 仅当成员未绑定;grantee 不存在 → 400
 test('admin 可授 owner/self;self 仅当成员未绑定;grantee 不存在 400', async () => {
   const { app, admin } = await setup();

@@ -137,7 +137,13 @@ const AppLayout = () => {
             </Avatar>
           </Dropdown>
         </Header>
-        <Content style={{ padding: 12, paddingBottom: 80, minHeight: 'calc(100vh - 52px)', overflow: 'auto' }}>
+        {/* 底部留白需覆盖 TabBar(50px)+iOS 安全区，否则末尾内容被遮挡 */}
+        <Content style={{
+          padding: 12,
+          paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
+          minHeight: 'calc(100vh - 52px)',
+          overflow: 'auto'
+        }}>
           <Outlet />
         </Content>
         <MobileTabBar />

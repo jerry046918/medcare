@@ -77,6 +77,9 @@ export default function MobileTabBar() {
     >
       {renderItem('/dashboard', <DashboardOutlined />, '首页')}
       {renderItem('/reports', <FileTextOutlined />, '报告')}
+      {/* 凸起按钮：负 margin 放在按钮自身上（flex stretch 下按钮盒子向上伸 18px、
+          高度 50+18=68），可见圆完整落在按钮命中区内；此前负 margin 挂在圆上，
+          圆的上沿超出按钮盒子导致顶部不可点 */}
       <button
         type="button"
         aria-label="上传"
@@ -84,8 +87,9 @@ export default function MobileTabBar() {
         style={{
           flex: 1,
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'center',
+          marginTop: -18,
           padding: 0,
           border: 'none',
           background: 'transparent',
@@ -97,7 +101,6 @@ export default function MobileTabBar() {
             width: 44,
             height: 44,
             borderRadius: 22,
-            marginTop: -18,
             background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
             display: 'flex',
             alignItems: 'center',

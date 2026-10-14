@@ -1,7 +1,7 @@
 const express = require('express');
-const { MedicalReport, FamilyMember, ReportIndicatorData, MedicalIndicator, MedicalLog, sequelize } = require('../models');
-const { authenticateToken } = require('../middleware/auth');
-const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../utils/security');
+const { MedicalReport, FamilyMember, ReportIndicatorData, MedicalIndicator, MedicalLog, sequelize } = require('../src/models');
+const { authenticateToken } = require('../src/middleware/auth');
+const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../src/utils/security');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;

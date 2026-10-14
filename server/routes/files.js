@@ -1,8 +1,8 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { authenticateToken } = require('../middleware/auth');
-const { validatePath } = require('../utils/security');
+const { authenticateToken } = require('../src/middleware/auth');
+const { validatePath } = require('../src/utils/security');
 
 const router = express.Router();
 

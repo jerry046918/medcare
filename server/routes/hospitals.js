@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const hospitalsData = require('../data/hospitals.json');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken } = require('../src/middleware/auth');
 
 // 搜索医院
 router.get('/search', authenticateToken, (req, res) => {

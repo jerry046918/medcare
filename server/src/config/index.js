@@ -43,9 +43,9 @@ const serverConfig = {
   nodeEnv: process.env.NODE_ENV || 'development'
 };
 
-// 数据库配置
+// 数据库配置（测试可通过 MEDCARE_DB_PATH 覆盖，如 ':memory:'）
 const dbConfig = {
-  storage: path.join(__dirname, '../database/medcare.db'),
+  storage: process.env.MEDCARE_DB_PATH || path.join(__dirname, '../../database/medcare.db'),
   logging: process.env.DB_LOGGING === 'true'
 };
 
@@ -62,7 +62,7 @@ const uploadConfig = {
   maxFileSize: 10 * 1024 * 1024, // 10MB
   allowedImageTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'],
   allowedDocTypes: ['application/pdf'],
-  uploadDir: path.join(__dirname, '../uploads')
+  uploadDir: path.join(__dirname, '../../uploads')
 };
 
 // 限流配置

@@ -1,4 +1,4 @@
-const { sequelize, MedicalIndicator, ReportIndicatorData } = require('../models');
+const { sequelize, MedicalIndicator, ReportIndicatorData } = require('../src/models');
 
 async function updateSchema() {
   try {

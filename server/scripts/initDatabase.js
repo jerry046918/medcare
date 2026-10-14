@@ -1,4 +1,4 @@
-const { sequelize, MedicalIndicator, User } = require('../models');
+const { sequelize, MedicalIndicator, User } = require('../src/models');
 const path = require('path');
 const fs = require('fs');
 

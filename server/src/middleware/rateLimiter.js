@@ -6,6 +6,10 @@
 const rateLimit = require('express-rate-limit');
 const { rateLimit: rateLimitConfig } = require('../config');
 
+// 测试环境直通：所有限流器退化为 noop，保证测试不受限流影响
+const noop = (req, res, next) => next();
+const disabled = process.env.NODE_ENV === 'test';
+
 /**
  * 通用 API 限流器
  * 每个 IP 在 15 分钟内最多 100 次请求
@@ -100,8 +104,8 @@ const uploadLimiter = rateLimit({
 });
 
 module.exports = {
-  apiLimiter,
-  authLimiter,
-  ocrLimiter,
-  uploadLimiter
+  apiLimiter: disabled ? noop : apiLimiter,
+  authLimiter: disabled ? noop : authLimiter,
+  ocrLimiter: disabled ? noop : ocrLimiter,
+  uploadLimiter: disabled ? noop : uploadLimiter
 };

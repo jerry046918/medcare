@@ -4,7 +4,7 @@
  * 运行方式：node scripts/addAliasesColumn.js
  */
 
-const { sequelize } = require('../models');
+const { sequelize } = require('../src/models');
 const path = require('path');
 const fs = require('fs');
 

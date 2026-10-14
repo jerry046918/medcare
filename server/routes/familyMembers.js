@@ -1,7 +1,7 @@
 const express = require('express');
-const { FamilyMember, MedicalReport, ReportIndicatorData, MedicalIndicator } = require('../models');
-const { authenticateToken } = require('../middleware/auth');
-const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../utils/security');
+const { FamilyMember, MedicalReport, ReportIndicatorData, MedicalIndicator } = require('../src/models');
+const { authenticateToken } = require('../src/middleware/auth');
+const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../src/utils/security');
 const router = express.Router();
 
 /**

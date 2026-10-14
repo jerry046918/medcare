@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { Sequelize, DataTypes } = require('sequelize');
-const { db: dbConfig } = require('../config');
+const { db: dbConfig } = require('../src/config');
 
 async function migrate() {
   const sequelize = new Sequelize({

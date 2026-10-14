@@ -4,8 +4,8 @@
  */
 
 const express = require('express');
-const { SystemConfig } = require('../models');
-const { authenticateToken } = require('../middleware/auth');
+const { SystemConfig } = require('../src/models');
+const { authenticateToken } = require('../src/middleware/auth');
 const { Op } = require('sequelize');
 
 const router = express.Router();

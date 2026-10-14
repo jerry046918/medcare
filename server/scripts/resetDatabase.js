@@ -3,7 +3,7 @@
  * 用于清理所有测试数据，将系统恢复到初始状态
  */
 
-const { sequelize, MedicalIndicator, User, FamilyMember, MedicalReport, ReportIndicatorData, MedicalLog } = require('../models');
+const { sequelize, MedicalIndicator, User, FamilyMember, MedicalReport, ReportIndicatorData, MedicalLog } = require('../src/models');
 const path = require('path');
 const fs = require('fs');
 

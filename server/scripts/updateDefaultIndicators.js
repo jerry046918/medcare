@@ -1,4 +1,4 @@
-const { sequelize, MedicalIndicator } = require('../models');
+const { sequelize, MedicalIndicator } = require('../src/models');
 
 // 更新默认指标的完整数据
 const updatedIndicators = [

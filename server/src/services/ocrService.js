@@ -84,7 +84,7 @@ class PaddleOCREngine extends BaseOCREngine {
     super(config);
     this.name = OCR_ENGINE.PADDLEOCR;
     // 使用嵌入版 Python 3.11（避免 Python 3.13 + numpy 2.x 兼容性问题）
-    const embeddedPythonPath = path.join(__dirname, '../python311/python.exe');
+    const embeddedPythonPath = path.join(__dirname, '../../python311/python.exe');
     this.pythonPath = config.pythonPath || (fsSync.existsSync(embeddedPythonPath) ? embeddedPythonPath : 'python');
     this.scriptPath = config.scriptPath || path.join(__dirname, 'paddle_ocr_worker.py');
   }
@@ -101,7 +101,7 @@ class PaddleOCREngine extends BaseOCREngine {
 
   async recognize(imageBuffer, options = {}) {
     return new Promise((resolve, reject) => {
-      const tempImagePath = path.join(__dirname, `../uploads/ocr/temp_${Date.now()}_${crypto.randomBytes(8).toString('hex')}.png`);
+      const tempImagePath = path.join(__dirname, `../../uploads/ocr/temp_${Date.now()}_${crypto.randomBytes(8).toString('hex')}.png`);
       
       // 临时保存图片
       fs.writeFile(tempImagePath, imageBuffer)

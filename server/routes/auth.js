@@ -1,10 +1,10 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { User, sequelize } = require('../models');
-const { jwt: jwtConfig } = require('../config');
-const { authLimiter } = require('../middleware/rateLimiter');
-const { authenticateToken } = require('../middleware/auth');
-const { sanitizeInput, validateDate } = require('../utils/security');
+const { User, sequelize } = require('../src/models');
+const { jwt: jwtConfig } = require('../src/config');
+const { authLimiter } = require('../src/middleware/rateLimiter');
+const { authenticateToken } = require('../src/middleware/auth');
+const { sanitizeInput, validateDate } = require('../src/utils/security');
 
 const router = express.Router();
 

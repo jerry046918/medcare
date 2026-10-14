@@ -7,18 +7,18 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
-const { authenticateToken } = require('../middleware/auth');
-const { ocrLimiter, uploadLimiter } = require('../middleware/rateLimiter');
-const { ocrService, OCR_ENGINE, processPDF } = require('../services/ocrService');
-const { processOCRResult, createIndicatorFromExtracted } = require('../services/indicatorParserService');
-const { SystemConfig, MedicalIndicator } = require('../models');
+const { authenticateToken } = require('../src/middleware/auth');
+const { ocrLimiter, uploadLimiter } = require('../src/middleware/rateLimiter');
+const { ocrService, OCR_ENGINE, processPDF } = require('../src/services/ocrService');
+const { processOCRResult, createIndicatorFromExtracted } = require('../src/services/indicatorParserService');
+const { SystemConfig, MedicalIndicator } = require('../src/models');
 const {
   sanitizeInput,
   validatePath,
   validateUploadedFile,
   validateOCREngine
-} = require('../utils/security');
-const { upload: uploadConfig, allowedOCREngines } = require('../config');
+} = require('../src/utils/security');
+const { upload: uploadConfig, allowedOCREngines } = require('../src/config');
 
 const router = express.Router();
 

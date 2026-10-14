@@ -15,7 +15,7 @@ exports.register = asyncHandler(async (req, res) => {
   // 现有 username/password 消毒与校验原样沿用（格式/长度），不合规直接 400
   ({ username, password } = authService.validateCredentials(req.body));
 
-  const { user, token, isFirst } = await sequelize.transaction(async (t) => {
+  const { user, token, isFirst, selfMember } = await sequelize.transaction(async (t) => {
     const userCount = await User.count({ transaction: t });
     let role = 'member';
     if (userCount === 0) {
@@ -30,11 +30,15 @@ exports.register = asyncHandler(async (req, res) => {
     if (existingUser) throw new HttpError(400, '用户名已存在');
 
     const created = await User.create({ username, password, role }, { transaction: t });
-    await authService.bindSelfForUser(created.id, { mode, memberData, claimMemberId, inviteCode, transaction: t });
+    const memberId = await authService.bindSelfForUser(created.id, { mode, memberData, claimMemberId, inviteCode, transaction: t });
+    // 响应带上本人成员（前端注册后无需再调 /auth/me 即可拿到 selfMember）
+    const selfMember = await FamilyMember.findByPk(memberId, {
+      attributes: ['id', 'name', 'gender', 'birthday'], transaction: t
+    });
     if (inviteCode) await inviteService.consumeInvite(inviteCode, t); // 原子消费（条件更新防超发）
 
     const signed = jwt.sign({ id: created.id, username: created.username }, jwtConfig.secret, { expiresIn: jwtConfig.expiresIn });
-    return { user: created, token: signed, isFirst: userCount === 0 };
+    return { user: created, token: signed, isFirst: userCount === 0, selfMember };
   });
 
   res.status(201).json({
@@ -42,7 +46,8 @@ exports.register = asyncHandler(async (req, res) => {
     message: isFirst ? '管理员账户创建成功' : '注册成功',
     data: {
       user: { id: user.id, username: user.username, displayName: user.displayName ?? null, role: user.role },
-      token
+      token,
+      selfMember
     }
   });
 });

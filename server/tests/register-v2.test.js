@@ -33,6 +33,8 @@ test('通用码 + mode=create:新成员 + self link + me 返回', async () => {
   const res = await createUser('user1', { inviteCode: inv.code, memberData: { name: '新一', gender: '女' } });
   assert.strictEqual(res.status, 201);
   assert.strictEqual(res.body.data.user.role, 'member');
+  // 注册响应直接带本人成员（v2：无需等 /auth/me）
+  assert.strictEqual(res.body.data.selfMember.name, '新一');
   const me = await auth(request(app).get('/api/auth/me'), res.body.data.token);
   assert.strictEqual(me.status, 200);
   assert.strictEqual(me.body.data.selfMember.name, '新一');

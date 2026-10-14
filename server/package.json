@@ -10,6 +10,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "init-db": "node scripts/initDatabase.js",
+    "migrate-v2": "node scripts/migrate-v2.js",
     "test": "node --test \"tests/**/*.test.js\"",
     "test:watch": "node --test --watch \"tests/**/*.test.js\""
   },

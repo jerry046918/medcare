@@ -1,14 +1,5 @@
-/**
- * 系统配置 API 路由
- * 管理系统设置，包括 OCR 配置等
- */
-
-const express = require('express');
-const { SystemConfig } = require('../src/models');
-const { authenticateToken } = require('../src/middleware/auth');
-const { Op } = require('sequelize');
-
-const router = express.Router();
+const { SystemConfig } = require('../models');
+const HttpError = require('../utils/httpError');
 
 /**
  * 脱敏处理：隐藏敏感密钥，只显示最后4位
@@ -35,7 +26,7 @@ function maskOcrSecrets(config) {
  * GET /api/config
  * 获取所有公开配置
  */
-router.get('/', authenticateToken, async (req, res) => {
+async function getPublicConfigs() {
   try {
     const configs = await SystemConfig.findAll({
       where: { isPublic: true },
@@ -56,29 +47,19 @@ router.get('/', authenticateToken, async (req, res) => {
       });
     }
 
-    res.json({
-      success: true,
-      data: groupedConfigs
-    });
-
+    return groupedConfigs;
   } catch (error) {
     console.error('获取配置失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取配置失败',
-      error: error.message
-    });
+    throw new HttpError(500, '获取配置失败', error.message);
   }
-});
+}
 
 /**
  * GET /api/config/:category
  * 获取指定分类的配置
  */
-router.get('/:category', authenticateToken, async (req, res) => {
+async function getByCategory(category) {
   try {
-    const { category } = req.params;
-
     const whereClause = { category };
 
     const configs = await SystemConfig.findAll({
@@ -89,7 +70,7 @@ router.get('/:category', authenticateToken, async (req, res) => {
     const result = {};
     for (const config of configs) {
       let value = config.configValue;
-      
+
       // 根据类型转换值
       if (config.configType === 'json') {
         try {
@@ -110,39 +91,27 @@ router.get('/:category', authenticateToken, async (req, res) => {
       };
     }
 
-    res.json({
-      success: true,
-      data: result
-    });
-
+    return result;
   } catch (error) {
     console.error('获取配置失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取配置失败',
-      error: error.message
-    });
+    throw new HttpError(500, '获取配置失败', error.message);
   }
-});
+}
 
 /**
  * PUT /api/config/:key
  * 更新指定配置项
  */
-router.put('/:key', authenticateToken, async (req, res) => {
+async function updateByKey(key, body) {
   try {
-    const { key } = req.params;
-    const { value, type } = req.body;
+    const { value, type } = body;
 
     const config = await SystemConfig.findOne({
       where: { configKey: key }
     });
 
     if (!config) {
-      return res.status(404).json({
-        success: false,
-        message: '配置项不存在'
-      });
+      throw new HttpError(404, '配置项不存在');
     }
 
     // 转换值
@@ -165,39 +134,28 @@ router.put('/:key', authenticateToken, async (req, res) => {
       configType
     });
 
-    res.json({
-      success: true,
-      message: '配置更新成功',
-      data: {
-        key: config.configKey,
-        value: config.configValue,
-        type: config.configType
-      }
-    });
-
+    return {
+      key: config.configKey,
+      value: config.configValue,
+      type: config.configType
+    };
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('更新配置失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '更新配置失败',
-      error: error.message
-    });
+    throw new HttpError(500, '更新配置失败', error.message);
   }
-});
+}
 
 /**
  * POST /api/config
  * 创建新配置项
  */
-router.post('/', authenticateToken, async (req, res) => {
+async function create(body) {
   try {
-    const { key, value, type, category, description, isPublic } = req.body;
+    const { key, value, type, category, description, isPublic } = body;
 
     if (!key || !category) {
-      return res.status(400).json({
-        success: false,
-        message: '配置键名和分类为必填项'
-      });
+      throw new HttpError(400, '配置键名和分类为必填项');
     }
 
     // 检查是否已存在
@@ -206,10 +164,7 @@ router.post('/', authenticateToken, async (req, res) => {
     });
 
     if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: '配置键名已存在'
-      });
+      throw new HttpError(400, '配置键名已存在');
     }
 
     // 转换值
@@ -236,65 +191,43 @@ router.post('/', authenticateToken, async (req, res) => {
       isPublic: isPublic !== false
     });
 
-    res.status(201).json({
-      success: true,
-      message: '配置创建成功',
-      data: config
-    });
-
+    return config;
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('创建配置失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '创建配置失败',
-      error: error.message
-    });
+    throw new HttpError(500, '创建配置失败', error.message);
   }
-});
+}
 
 /**
  * DELETE /api/config/:key
  * 删除配置项
  */
-router.delete('/:key', authenticateToken, async (req, res) => {
+async function remove(key) {
   try {
-    const { key } = req.params;
-
     const config = await SystemConfig.findOne({
       where: { configKey: key }
     });
 
     if (!config) {
-      return res.status(404).json({
-        success: false,
-        message: '配置项不存在'
-      });
+      throw new HttpError(404, '配置项不存在');
     }
 
     await config.destroy();
-
-    res.json({
-      success: true,
-      message: '配置删除成功'
-    });
-
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('删除配置失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '删除配置失败',
-      error: error.message
-    });
+    throw new HttpError(500, '删除配置失败', error.message);
   }
-});
+}
 
 /**
  * POST /api/config/ocr/batch
  * 批量设置 OCR 配置
  */
-router.post('/ocr/batch', authenticateToken, async (req, res) => {
+async function saveOcrBatch(body) {
   try {
-    const { defaultEngine, paddleocr, openai_vision } = req.body;
+    const { defaultEngine, paddleocr, openai_vision } = body;
 
     const configs = [];
 
@@ -330,7 +263,7 @@ router.post('/ocr/batch', authenticateToken, async (req, res) => {
         safeConfig.hasApiKey = true;
         // 不保存到公开配置
       }
-      
+
       configs.push({
         configKey: 'ocr_openai_vision',
         configValue: JSON.stringify(safeConfig),
@@ -345,27 +278,17 @@ router.post('/ocr/batch', authenticateToken, async (req, res) => {
     for (const configData of configs) {
       await SystemConfig.upsert(configData);
     }
-
-    res.json({
-      success: true,
-      message: 'OCR 配置保存成功'
-    });
-
   } catch (error) {
     console.error('保存 OCR 配置失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '保存 OCR 配置失败',
-      error: error.message
-    });
+    throw new HttpError(500, '保存 OCR 配置失败', error.message);
   }
-});
+}
 
 /**
  * GET /api/config/ocr/full
  * 获取完整的 OCR 配置（包括敏感信息，用于设置页面）
  */
-router.get('/ocr/full', authenticateToken, async (req, res) => {
+async function getOcrFull() {
   try {
     const configs = await SystemConfig.findAll({
       where: { category: 'ocr' },
@@ -384,8 +307,8 @@ router.get('/ocr/full', authenticateToken, async (req, res) => {
       } else if (config.configKey.startsWith('ocr_')) {
         const key = config.configKey.replace('ocr_', '');
         try {
-          result[key] = typeof config.configValue === 'string' 
-            ? JSON.parse(config.configValue) 
+          result[key] = typeof config.configValue === 'string'
+            ? JSON.parse(config.configValue)
             : config.configValue;
         } catch (e) {
           result[key] = config.configValue;
@@ -393,19 +316,12 @@ router.get('/ocr/full', authenticateToken, async (req, res) => {
       }
     }
 
-    res.json({
-      success: true,
-      data: maskOcrSecrets(result)
-    });
-
+    return maskOcrSecrets(result);
   } catch (error) {
     console.error('获取 OCR 配置失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取 OCR 配置失败',
-      error: process.env.NODE_ENV === 'production' ? undefined : error.message
-    });
+    throw new HttpError(500, '获取 OCR 配置失败',
+      process.env.NODE_ENV === 'production' ? undefined : error.message);
   }
-});
+}
 
-module.exports = router;
+module.exports = { getPublicConfigs, getByCategory, updateByKey, create, remove, saveOcrBatch, getOcrFull };

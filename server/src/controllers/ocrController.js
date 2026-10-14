@@ -1,26 +1,22 @@
 /**
- * OCR API 路由
+ * OCR API 控制器
  * 提供图片上传、OCR 识别、指标解析等功能
+ * multer 实例与 OCR 初始化状态随本控制器（自旧 routes/ocr.js 原样迁移）
  */
 
-const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
-const { authenticateToken } = require('../src/middleware/auth');
-const { ocrLimiter, uploadLimiter } = require('../src/middleware/rateLimiter');
-const { ocrService, OCR_ENGINE, processPDF } = require('../src/services/ocrService');
-const { processOCRResult, createIndicatorFromExtracted } = require('../src/services/indicatorParserService');
-const { SystemConfig, MedicalIndicator } = require('../src/models');
+const { ocrService, OCR_ENGINE, processPDF } = require('../services/ocrService');
+const { processOCRResult, createIndicatorFromExtracted } = require('../services/indicatorParserService');
+const { SystemConfig, MedicalIndicator } = require('../models');
 const {
   sanitizeInput,
   validatePath,
   validateUploadedFile,
   validateOCREngine
-} = require('../src/utils/security');
-const { upload: uploadConfig, allowedOCREngines } = require('../src/config');
-
-const router = express.Router();
+} = require('../utils/security');
+const { upload: uploadConfig, allowedOCREngines } = require('../config');
 
 // 安全的文件名生成函数
 function generateSafeFilename(originalName) {
@@ -35,9 +31,10 @@ function generateSafeFilename(originalName) {
 }
 
 // 配置文件上传
+// 路径锚定在 server 根目录（与拆分前 routes/ 版本解析出的绝对路径一致）
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../uploads/ocr');
+    const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'ocr');
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
@@ -124,7 +121,7 @@ async function ensureOCRInitialized() {
  * POST /api/ocr/upload
  * 上传图片并进行 OCR 识别
  */
-router.post('/upload', authenticateToken, ocrLimiter, upload.single('image'), async (req, res) => {
+exports.upload = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -159,7 +156,7 @@ router.post('/upload', authenticateToken, ocrLimiter, upload.single('image'), as
     }
 
     // 安全地读取文件
-    const baseDir = path.join(__dirname, '../uploads/ocr');
+    const baseDir = path.join(__dirname, '..', '..', 'uploads', 'ocr');
     const safePath = validatePath(req.file.path, baseDir);
     if (!safePath) {
       return res.status(400).json({
@@ -221,13 +218,13 @@ router.post('/upload', authenticateToken, ocrLimiter, upload.single('image'), as
       error: process.env.NODE_ENV === 'production' ? '服务器错误' : error.message
     });
   }
-});
+};
 
 /**
  * POST /api/ocr/parse
  * 解析 OCR 识别结果，提取指标并匹配
  */
-router.post('/parse', authenticateToken, async (req, res) => {
+exports.parse = async (req, res) => {
   try {
     const { text } = req.body;
 
@@ -256,13 +253,13 @@ router.post('/parse', authenticateToken, async (req, res) => {
       message: '指标解析失败'
     });
   }
-});
+};
 
 /**
  * POST /api/ocr/recognize-and-parse
  * 上传图片，识别并解析（一站式接口）
  */
-router.post('/recognize-and-parse', authenticateToken, ocrLimiter, upload.single('image'), async (req, res) => {
+exports.recognizeAndParse = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -293,7 +290,7 @@ router.post('/recognize-and-parse', authenticateToken, ocrLimiter, upload.single
     }
 
     // 安全地读取文件
-    const baseDir = path.join(__dirname, '../uploads/ocr');
+    const baseDir = path.join(__dirname, '..', '..', 'uploads', 'ocr');
     const safePath = validatePath(req.file.path, baseDir);
     if (!safePath) {
       return res.status(400).json({
@@ -384,13 +381,13 @@ router.post('/recognize-and-parse', authenticateToken, ocrLimiter, upload.single
       error: process.env.NODE_ENV === 'production' ? '服务器错误' : error.message
     });
   }
-});
+};
 
 /**
  * POST /api/ocr/create-indicator
  * 为未匹配的指标创建新指标
  */
-router.post('/create-indicator', authenticateToken, async (req, res) => {
+exports.createIndicator = async (req, res) => {
   try {
     const { extracted, type } = req.body;
 
@@ -424,13 +421,13 @@ router.post('/create-indicator', authenticateToken, async (req, res) => {
       message: '创建指标失败'
     });
   }
-});
+};
 
 /**
  * GET /api/ocr/engines
  * 获取可用的 OCR 引擎列表
  */
-router.get('/engines', authenticateToken, async (req, res) => {
+exports.engines = async (req, res) => {
   try {
     const service = await ensureOCRInitialized();
     const engines = await service.getAvailableEngines();
@@ -447,13 +444,13 @@ router.get('/engines', authenticateToken, async (req, res) => {
       message: '获取引擎列表失败'
     });
   }
-});
+};
 
 /**
  * GET /api/ocr/config
  * 获取 OCR 配置（非敏感信息）
  */
-router.get('/config', authenticateToken, async (req, res) => {
+exports.config = async (req, res) => {
   try {
     const configs = await SystemConfig.findAll({
       where: { category: 'ocr', isPublic: true },
@@ -472,7 +469,7 @@ router.get('/config', authenticateToken, async (req, res) => {
       message: '获取 OCR 配置失败'
     });
   }
-});
+};
 
 /**
  * POST /api/ocr/confirm-match
@@ -481,7 +478,7 @@ router.get('/config', authenticateToken, async (req, res) => {
  * 当用户手动选择一个指标来匹配 OCR 识别结果时，
  * 系统会自动将 OCR 识别的名称添加为该指标的别名
  */
-router.post('/confirm-match', authenticateToken, async (req, res) => {
+exports.confirmMatch = async (req, res) => {
   try {
     const { indicatorId, extractedName, autoAddAlias = true } = req.body;
 
@@ -553,6 +550,6 @@ router.post('/confirm-match', authenticateToken, async (req, res) => {
       message: '确认匹配失败'
     });
   }
-});
+};
 
-module.exports = router;
+exports.uploadMiddleware = upload;

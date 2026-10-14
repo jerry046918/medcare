@@ -1,10 +1,6 @@
-const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { authenticateToken } = require('../src/middleware/auth');
-const { validatePath } = require('../src/utils/security');
-
-const router = express.Router();
+const { validatePath } = require('../utils/security');
 
 // 允许的文件类型目录
 const ALLOWED_TYPES = ['reports', 'ocr'];
@@ -13,7 +9,7 @@ const ALLOWED_TYPES = ['reports', 'ocr'];
  * GET /api/files/:type/:filename
  * 认证后提供上传文件访问（替代公开的 express.static 访问）
  */
-router.get('/:type/:filename', authenticateToken, (req, res) => {
+exports.get = (req, res) => {
   try {
     const { type, filename } = req.params;
 
@@ -34,7 +30,8 @@ router.get('/:type/:filename', authenticateToken, (req, res) => {
     }
 
     // 构建并验证文件路径（防路径穿越）
-    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    // 路径锚定在 server 根目录（与拆分前 routes/ 版本解析出的绝对路径一致）
+    const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
     const relativePath = path.join(type, filename);
     const filePath = validatePath(relativePath, uploadsDir);
 
@@ -60,6 +57,4 @@ router.get('/:type/:filename', authenticateToken, (req, res) => {
       message: '获取文件失败'
     });
   }
-});
-
-module.exports = router;
+};

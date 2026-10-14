@@ -6,17 +6,17 @@ const { server: serverConfig } = require('./config');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const { errorHandler } = require('./middleware/errorHandler');
 
-// 路由（members/reports 已拆为新结构；其余仍指向旧 routes/，Task 4 逐个换）
-const authRoutes = require('../routes/auth');
+// 路由（全部位于 src/routes，旧 routes/ 已在 Task 4 删除）
+const authRoutes = require('./routes/auth');
 const memberRoutes = require('./routes/members');
 const reportRoutes = require('./routes/reports');
-const indicatorRoutes = require('../routes/indicators');
-const medicationRoutes = require('../routes/medications');
-const medicalLogRoutes = require('../routes/medicalLogs');
-const hospitalRoutes = require('../routes/hospitals');
-const ocrRoutes = require('../routes/ocr');
-const configRoutes = require('../routes/config');
-const fileRoutes = require('../routes/files');
+const indicatorRoutes = require('./routes/indicators');
+const medicationRoutes = require('./routes/medications');
+const medicalLogRoutes = require('./routes/medicalLogs');
+const hospitalRoutes = require('./routes/hospitals');
+const ocrRoutes = require('./routes/ocr');
+const configRoutes = require('./routes/config');
+const fileRoutes = require('./routes/files');
 
 function createApp() {
   const app = express();

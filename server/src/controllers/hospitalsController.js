@@ -1,36 +1,33 @@
-const express = require('express');
-const router = express.Router();
-const hospitalsData = require('../data/hospitals.json');
-const { authenticateToken } = require('../src/middleware/auth');
+const hospitalsData = require('../../data/hospitals.json');
 
 // 搜索医院
-router.get('/search', authenticateToken, (req, res) => {
+exports.search = (req, res) => {
   try {
     const { keyword, province, limit = 20 } = req.query;
-    
+
     let results = hospitalsData.hospitals;
-    
+
     // 按关键词过滤
     if (keyword && keyword.trim()) {
       const keywordLower = keyword.toLowerCase().trim();
-      results = results.filter(hospital => 
+      results = results.filter(hospital =>
         (hospital.name && hospital.name.toLowerCase().includes(keywordLower)) ||
         (hospital.province && hospital.province.includes(keyword)) ||
         (hospital.city && hospital.city.includes(keyword))
       );
     }
-    
+
     // 按省份过滤
     if (province && province.trim()) {
-      results = results.filter(hospital => 
+      results = results.filter(hospital =>
         hospital.province.includes(province.trim())
       );
     }
-    
+
     // 限制返回数量
     const maxLimit = Math.min(parseInt(limit, 10) || 20, 100);
     results = results.slice(0, maxLimit);
-    
+
     res.json({
       success: true,
       data: results,
@@ -44,10 +41,10 @@ router.get('/search', authenticateToken, (req, res) => {
       error: error.message
     });
   }
-});
+};
 
 // 获取所有省份
-router.get('/provinces', authenticateToken, (req, res) => {
+exports.provinces = (req, res) => {
   try {
     const provinces = [...new Set(hospitalsData.hospitals.map(h => h.province))];
     res.json({
@@ -62,10 +59,10 @@ router.get('/provinces', authenticateToken, (req, res) => {
       error: error.message
     });
   }
-});
+};
 
 // 获取所有医院（用于下拉列表）
-router.get('/all', authenticateToken, (req, res) => {
+exports.all = (req, res) => {
   try {
     res.json({
       success: true,
@@ -79,6 +76,4 @@ router.get('/all', authenticateToken, (req, res) => {
       error: error.message
     });
   }
-});
-
-module.exports = router;
+};

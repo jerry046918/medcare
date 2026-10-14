@@ -12,6 +12,9 @@ function errorHandler(err, req, res, next) {
     return res.status(429).json({ success: false, message: '请求过于频繁，请稍后再试' });
   }
   if (err instanceof HttpError) {
+    if (err.details !== undefined) {
+      return res.status(err.status).json({ success: false, message: err.message, error: err.details });
+    }
     return res.status(err.status).json({ success: false, message: err.message });
   }
   console.error('服务器错误:', err);

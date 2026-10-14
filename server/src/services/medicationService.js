@@ -1,8 +1,6 @@
-const express = require('express');
-const { Medication, FamilyMember, MedicalLog } = require('../src/models');
-const { authenticateToken } = require('../src/middleware/auth');
-const { sanitizeInput, escapeHtml } = require('../src/utils/security');
-const router = express.Router();
+const { Medication, FamilyMember, MedicalLog } = require('../models');
+const HttpError = require('../utils/httpError');
+const { sanitizeInput, escapeHtml } = require('../utils/security');
 
 function sanitizeMedicationData(data) {
   const sanitized = { ...data };
@@ -14,102 +12,76 @@ function sanitizeMedicationData(data) {
 }
 
 // 获取指定成员的所有用药记录
-router.get('/member/:memberId', authenticateToken, async (req, res) => {
+async function listByMember(userId, memberId) {
   try {
     // 验证家庭成员属于当前用户
     const familyMember = await FamilyMember.findOne({
-      where: { 
-        id: req.params.memberId,
-        userId: req.user.id 
+      where: {
+        id: memberId,
+        userId
       }
     });
 
     if (!familyMember) {
-      return res.status(404).json({
-        success: false,
-        message: '家庭成员不存在或无权限访问'
-      });
+      throw new HttpError(404, '家庭成员不存在或无权限访问');
     }
 
-    const medications = await Medication.findAll({
-      where: { memberId: req.params.memberId },
+    return await Medication.findAll({
+      where: { memberId },
       order: [['createdAt', 'DESC']]
     });
-
-    res.json({
-      success: true,
-      data: medications
-    });
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('获取用药记录失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取用药记录失败',
-      error: error.message
-    });
+    throw new HttpError(500, '获取用药记录失败', error.message);
   }
-});
+}
 
 // 获取单个用药记录
-router.get('/:id', authenticateToken, async (req, res) => {
+async function getById(userId, id) {
   try {
     const medication = await Medication.findOne({
-      where: { id: req.params.id },
+      where: { id },
       include: [{
         model: FamilyMember,
         as: 'familyMember',
-        where: { userId: req.user.id }
+        where: { userId }
       }]
     });
 
     if (!medication) {
-      return res.status(404).json({
-        success: false,
-        message: '用药记录不存在或无权限访问'
-      });
+      throw new HttpError(404, '用药记录不存在或无权限访问');
     }
 
-    res.json({
-      success: true,
-      data: medication
-    });
+    return medication;
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('获取用药记录详情失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取用药记录详情失败',
-      error: error.message
-    });
+    throw new HttpError(500, '获取用药记录详情失败', error.message);
   }
-});
+}
 
 // 创建用药记录
-router.post('/', authenticateToken, async (req, res) => {
+async function create(userId, body) {
   try {
-    const sanitized = sanitizeMedicationData(req.body);
+    const sanitized = sanitizeMedicationData(body);
     const { memberId, name, specification, frequency, notes } = sanitized;
 
     // 验证必填字段
     if (!memberId || !name) {
-      return res.status(400).json({
-        success: false,
-        message: '家庭成员和药品名称为必填字段'
-      });
+      throw new HttpError(400, '家庭成员和药品名称为必填字段');
     }
 
     // 验证家庭成员是否属于当前用户
     const familyMember = await FamilyMember.findOne({
-      where: { 
+      where: {
         id: memberId,
-        userId: req.user.id 
+        userId
       }
     });
 
     if (!familyMember) {
-      return res.status(404).json({
-        success: false,
-        message: '家庭成员不存在或无权限访问'
-      });
+      throw new HttpError(404, '家庭成员不存在或无权限访问');
     }
 
     const medication = await Medication.create({
@@ -131,41 +103,32 @@ router.post('/', authenticateToken, async (req, res) => {
       logDate: new Date().toISOString().split('T')[0],
       treatmentStartDate: new Date() // 调整发生的时间
     });
-    res.status(201).json({
-      success: true,
-      message: '用药记录创建成功',
-      data: medication
-    });
+
+    return medication;
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('创建用药记录失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '创建用药记录失败',
-      error: error.message
-    });
+    throw new HttpError(500, '创建用药记录失败', error.message);
   }
-});
+}
 
 // 更新用药记录
-router.put('/:id', authenticateToken, async (req, res) => {
+async function update(userId, id, body) {
   try {
-    const sanitized = sanitizeMedicationData(req.body);
+    const sanitized = sanitizeMedicationData(body);
     const { name, specification, frequency, notes, isActive } = sanitized;
 
     const medication = await Medication.findOne({
-      where: { id: req.params.id },
+      where: { id },
       include: [{
         model: FamilyMember,
         as: 'familyMember',
-        where: { userId: req.user.id }
+        where: { userId }
       }]
     });
 
     if (!medication) {
-      return res.status(404).json({
-        success: false,
-        message: '用药记录不存在或无权限访问'
-      });
+      throw new HttpError(404, '用药记录不存在或无权限访问');
     }
 
     const previousIsActive = medication.isActive;
@@ -190,54 +153,37 @@ router.put('/:id', authenticateToken, async (req, res) => {
         treatmentStartDate: new Date() // 调整发生的时间
       });
     }
-    res.json({
-      success: true,
-      message: '用药记录更新成功',
-      data: medication
-    });
+
+    return medication;
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('更新用药记录失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '更新用药记录失败',
-      error: error.message
-    });
+    throw new HttpError(500, '更新用药记录失败', error.message);
   }
-});
+}
 
 // 删除用药记录
-router.delete('/:id', authenticateToken, async (req, res) => {
+async function remove(userId, id) {
   try {
     const medication = await Medication.findOne({
-      where: { id: req.params.id },
+      where: { id },
       include: [{
         model: FamilyMember,
         as: 'familyMember',
-        where: { userId: req.user.id }
+        where: { userId }
       }]
     });
 
     if (!medication) {
-      return res.status(404).json({
-        success: false,
-        message: '用药记录不存在或无权限访问'
-      });
+      throw new HttpError(404, '用药记录不存在或无权限访问');
     }
 
     await medication.destroy();
-
-    res.json({
-      success: true,
-      message: '用药记录删除成功'
-    });
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('删除用药记录失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '删除用药记录失败',
-      error: error.message
-    });
+    throw new HttpError(500, '删除用药记录失败', error.message);
   }
-});
+}
 
-module.exports = router;
+module.exports = { listByMember, getById, create, update, remove };

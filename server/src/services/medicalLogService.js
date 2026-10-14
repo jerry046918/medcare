@@ -1,8 +1,6 @@
-const express = require('express');
-const { MedicalLog, FamilyMember, MedicalReport, Medication } = require('../src/models');
-const { authenticateToken } = require('../src/middleware/auth');
-const { sanitizeInput, escapeHtml } = require('../src/utils/security');
-const router = express.Router();
+const { MedicalLog, FamilyMember, MedicalReport, Medication } = require('../models');
+const HttpError = require('../utils/httpError');
+const { sanitizeInput, escapeHtml } = require('../utils/security');
 
 function sanitizeLogData(data) {
   const sanitized = { ...data };
@@ -13,25 +11,22 @@ function sanitizeLogData(data) {
 }
 
 // 获取指定成员的所有医疗日志
-router.get('/member/:memberId', authenticateToken, async (req, res) => {
+async function listByMember(userId, memberId) {
   try {
     // 验证家庭成员属于当前用户
     const familyMember = await FamilyMember.findOne({
-      where: { 
-        id: req.params.memberId,
-        userId: req.user.id 
+      where: {
+        id: memberId,
+        userId
       }
     });
 
     if (!familyMember) {
-      return res.status(404).json({
-        success: false,
-        message: '家庭成员不存在或无权限访问'
-      });
+      throw new HttpError(404, '家庭成员不存在或无权限访问');
     }
 
-    const logs = await MedicalLog.findAll({
-      where: { memberId: req.params.memberId },
+    return await MedicalLog.findAll({
+      where: { memberId },
       include: [
         {
           model: MedicalReport,
@@ -50,31 +45,23 @@ router.get('/member/:memberId', authenticateToken, async (req, res) => {
         ['createdAt', 'DESC']
       ]
     });
-
-    res.json({
-      success: true,
-      data: logs
-    });
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('获取医疗日志失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取医疗日志失败',
-      error: error.message
-    });
+    throw new HttpError(500, '获取医疗日志失败', error.message);
   }
-});
+}
 
 // 获取单个医疗日志
-router.get('/:id', authenticateToken, async (req, res) => {
+async function getById(userId, id) {
   try {
     const log = await MedicalLog.findOne({
-      where: { id: req.params.id },
+      where: { id },
       include: [
         {
           model: FamilyMember,
           as: 'familyMember',
-          where: { userId: req.user.id }
+          where: { userId }
         },
         {
           model: MedicalReport,
@@ -90,62 +77,44 @@ router.get('/:id', authenticateToken, async (req, res) => {
     });
 
     if (!log) {
-      return res.status(404).json({
-        success: false,
-        message: '医疗日志不存在或无权限访问'
-      });
+      throw new HttpError(404, '医疗日志不存在或无权限访问');
     }
 
-    res.json({
-      success: true,
-      data: log
-    });
+    return log;
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('获取医疗日志详情失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取医疗日志详情失败',
-      error: error.message
-    });
+    throw new HttpError(500, '获取医疗日志详情失败', error.message);
   }
-});
+}
 
 // 创建手动医疗日志
-router.post('/', authenticateToken, async (req, res) => {
+async function create(userId, body) {
   try {
-    const sanitized = sanitizeLogData(req.body);
+    const sanitized = sanitizeLogData(body);
     const { memberId, logType, title, description, hospital, treatmentStartDate, treatmentEndDate } = sanitized;
 
     // 验证必填字段
     if (!memberId || !logType || !title) {
-      return res.status(400).json({
-        success: false,
-        message: '家庭成员、行为类型和标题为必填字段'
-      });
+      throw new HttpError(400, '家庭成员、行为类型和标题为必填字段');
     }
 
     // 验证logType必须是手动类型
     const manualTypes = ['hospitalization', 'outpatient', 'emergency'];
     if (!manualTypes.includes(logType)) {
-      return res.status(400).json({
-        success: false,
-        message: '手动日志类型必须是：住院治疗、门诊治疗或急诊治疗'
-      });
+      throw new HttpError(400, '手动日志类型必须是：住院治疗、门诊治疗或急诊治疗');
     }
 
     // 验证家庭成员是否属于当前用户
     const familyMember = await FamilyMember.findOne({
-      where: { 
+      where: {
         id: memberId,
-        userId: req.user.id 
+        userId
       }
     });
 
     if (!familyMember) {
-      return res.status(404).json({
-        success: false,
-        message: '家庭成员不存在或无权限访问'
-      });
+      throw new HttpError(404, '家庭成员不存在或无权限访问');
     }
 
     // 处理日期
@@ -167,7 +136,7 @@ router.post('/', authenticateToken, async (req, res) => {
     });
 
     // 返回完整的日志信息
-    const fullLog = await MedicalLog.findOne({
+    return await MedicalLog.findOne({
       where: { id: log.id },
       include: [
         {
@@ -187,51 +156,36 @@ router.post('/', authenticateToken, async (req, res) => {
         }
       ]
     });
-
-    res.status(201).json({
-      success: true,
-      message: '医疗日志创建成功',
-      data: fullLog
-    });
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('创建医疗日志失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '创建医疗日志失败',
-      error: error.message
-    });
+    throw new HttpError(500, '创建医疗日志失败', error.message);
   }
-});
+}
 
 // 更新医疗日志
-router.put('/:id', authenticateToken, async (req, res) => {
+async function update(userId, id, body) {
   try {
-    const sanitized = sanitizeLogData(req.body);
+    const sanitized = sanitizeLogData(body);
     const { title, description, hospital, treatmentStartDate, treatmentEndDate } = sanitized;
 
     const log = await MedicalLog.findOne({
-      where: { id: req.params.id },
+      where: { id },
       include: [{
         model: FamilyMember,
         as: 'familyMember',
-        where: { userId: req.user.id }
+        where: { userId }
       }]
     });
 
     if (!log) {
-      return res.status(404).json({
-        success: false,
-        message: '医疗日志不存在或无权限访问'
-      });
+      throw new HttpError(404, '医疗日志不存在或无权限访问');
     }
 
     // 只允许编辑手动添加的日志
     const manualTypes = ['hospitalization', 'outpatient', 'emergency'];
     if (!manualTypes.includes(log.logType)) {
-      return res.status(400).json({
-        success: false,
-        message: '系统自动生成的日志不能编辑'
-      });
+      throw new HttpError(400, '系统自动生成的日志不能编辑');
     }
 
     const updateData = {
@@ -244,70 +198,49 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateData.treatmentStartDate = new Date(treatmentStartDate);
       updateData.logDate = new Date(treatmentStartDate).toISOString().split('T')[0];
     }
-    
+
     if (treatmentEndDate !== undefined) {
       updateData.treatmentEndDate = treatmentEndDate ? new Date(treatmentEndDate) : null;
     }
 
     await log.update(updateData);
 
-    res.json({
-      success: true,
-      message: '医疗日志更新成功',
-      data: log
-    });
+    return log;
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('更新医疗日志失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '更新医疗日志失败',
-      error: error.message
-    });
+    throw new HttpError(500, '更新医疗日志失败', error.message);
   }
-});
+}
 
 // 删除医疗日志
-router.delete('/:id', authenticateToken, async (req, res) => {
+async function remove(userId, id) {
   try {
     const log = await MedicalLog.findOne({
-      where: { id: req.params.id },
+      where: { id },
       include: [{
         model: FamilyMember,
         as: 'familyMember',
-        where: { userId: req.user.id }
+        where: { userId }
       }]
     });
 
     if (!log) {
-      return res.status(404).json({
-        success: false,
-        message: '医疗日志不存在或无权限访问'
-      });
+      throw new HttpError(404, '医疗日志不存在或无权限访问');
     }
 
     // 只允许删除手动添加的日志
     const manualTypes = ['hospitalization', 'outpatient', 'emergency'];
     if (!manualTypes.includes(log.logType)) {
-      return res.status(400).json({
-        success: false,
-        message: '系统自动生成的日志不能删除'
-      });
+      throw new HttpError(400, '系统自动生成的日志不能删除');
     }
 
     await log.destroy();
-
-    res.json({
-      success: true,
-      message: '医疗日志删除成功'
-    });
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error('删除医疗日志失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '删除医疗日志失败',
-      error: error.message
-    });
+    throw new HttpError(500, '删除医疗日志失败', error.message);
   }
-});
+}
 
-module.exports = router;
+module.exports = { listByMember, getById, create, update, remove };

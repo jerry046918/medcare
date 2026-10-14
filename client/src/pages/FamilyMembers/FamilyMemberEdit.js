@@ -24,6 +24,7 @@ import {
   updateFamilyMember,
   clearError
 } from '../../store/slices/familyMemberSlice';
+import useBreakpoint from '../../hooks/useBreakpoint';
 
 const { Option } = Select;
 
@@ -32,6 +33,7 @@ const FamilyMemberEdit = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [form] = Form.useForm();
+  const { isMobile } = useBreakpoint();
   
   const { currentMember, isLoading, isUpdating, error } = useSelector(
     state => state.familyMembers
@@ -196,16 +198,25 @@ const FamilyMemberEdit = () => {
           </Form.Item>
 
           <Form.Item>
-            <Space>
+            <Space
+              direction={isMobile ? 'vertical' : 'horizontal'}
+              style={isMobile ? { width: '100%' } : undefined}
+            >
               <Button
                 type="primary"
                 htmlType="submit"
                 icon={<SaveOutlined />}
                 loading={isUpdating}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
               >
                 保存更改
               </Button>
-              <Button onClick={handleBack}>
+              <Button
+                onClick={handleBack}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
+              >
                 取消
               </Button>
             </Space>

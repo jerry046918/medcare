@@ -67,10 +67,18 @@ export default function QuickUpload() {
     dispatch(fetchIndicators());
   }, [dispatch]);
 
-  // 成员默认本人（auth v2 selfMember）
+  // 成员默认本人（auth v2 selfMember）；函数式更新保留已有预选（?memberId=）
   useEffect(() => {
-    if (selfMember?.id) setMemberId(selfMember.id);
+    if (selfMember?.id) setMemberId((prev) => prev ?? selfMember.id);
   }, [selfMember]);
+
+  // 家族成员页「上传」入口带 ?memberId= → 预选该成员（非法/不存在时保持默认本人）
+  const preselected = Number(new URLSearchParams(window.location.search).get('memberId'));
+  useEffect(() => {
+    if (preselected && members.some((m) => m.id === preselected)) {
+      setMemberId(preselected);
+    }
+  }, [preselected, members]);
 
   // 触发识别：统一走 FILE_PICKED 事件（capture→recognizing；队列续张时已在 recognizing 则原态保持）
   const recognize = (f) => {

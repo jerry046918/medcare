@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
+  List,
   Button,
   Space,
   Modal,
@@ -15,13 +16,15 @@ import {
   message,
   Popconfirm,
   Tag,
-  Avatar
+  Avatar,
+  Empty
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
+  UploadOutlined,
   UserOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -32,12 +35,22 @@ import {
   deleteFamilyMember,
   clearError
 } from '../../store/slices/familyMemberSlice';
+import useBreakpoint from '../../hooks/useBreakpoint';
 
 const { Option } = Select;
+
+// v2 视角角色（UserMemberLink.role）→ 卡片徽标
+const ROLE_BADGES = {
+  self: { text: '本人', color: 'blue' },
+  owner: { text: '代管', color: 'purple' },
+  editor: { text: '可编辑', color: 'cyan' },
+  viewer: { text: '只读', color: 'default' }
+};
 
 const FamilyMembers = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { isMobile } = useBreakpoint();
   const { list, isLoading, isCreating, isUpdating, isDeleting, error } = useSelector(
     state => state.familyMembers
   );
@@ -109,6 +122,11 @@ const FamilyMembers = () => {
 
   const handleViewDetail = (member) => {
     navigate(`/family-members/${member.id}`);
+  };
+
+  // 卡片上的「上传」入口：带成员预选跳快速上传（QuickUpload 读 ?memberId=）
+  const handleQuickUpload = (member) => {
+    navigate(`/upload/quick?memberId=${member.id}`);
   };
 
   const columns = [
@@ -242,18 +260,75 @@ const FamilyMembers = () => {
           </Button>
         }
       >
-        <Table
-          columns={columns}
-          dataSource={list}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`
-          }}
-        />
+        {isMobile ? (
+          // 移动端头像卡片列表：与桌面 Table 同源（list），点卡片进详情
+          <List
+            dataSource={list}
+            loading={isLoading}
+            locale={{ emptyText: <Empty description="暂无家庭成员" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            renderItem={(member) => {
+              const roleBadge = ROLE_BADGES[member.role] || null;
+              return (
+                <Card
+                  size="small"
+                  style={{ marginBottom: 8, cursor: 'pointer' }}
+                  onClick={() => handleViewDetail(member)}
+                >
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <Avatar
+                      size={48}
+                      icon={<UserOutlined />}
+                      style={{ backgroundColor: member.gender === '男' ? '#1890ff' : '#f759ab', flexShrink: 0 }}
+                    >
+                      {member.name.charAt(0)}
+                    </Avatar>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600 }}>{member.name}</span>
+                        <Tag color={member.gender === '男' ? 'blue' : 'pink'} style={{ marginRight: 0 }}>
+                          {member.gender}
+                        </Tag>
+                        {roleBadge && <Tag color={roleBadge.color} style={{ marginRight: 0 }}>{roleBadge.text}</Tag>}
+                      </div>
+                      <div style={{ color: '#64748b', fontSize: 12, marginTop: 4 }}>
+                        {member.relationship || '—'}
+                        {member.age ? ` · ${member.age}岁` : ''}
+                        {member.height ? ` · ${member.height}cm` : ''}
+                        {member.weight ? ` · ${member.weight}kg` : ''}
+                      </div>
+                    </div>
+                    <Button
+                      type="primary"
+                      ghost
+                      icon={<UploadOutlined />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickUpload(member);
+                      }}
+                      style={{ height: 44, flexShrink: 0 }}
+                      aria-label={`为${member.name}上传报告`}
+                    >
+                      上传
+                    </Button>
+                  </div>
+                </Card>
+              );
+            }}
+          />
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={list}
+            rowKey="id"
+            loading={isLoading}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条记录`
+            }}
+          />
+        )}
       </Card>
 
       <Modal

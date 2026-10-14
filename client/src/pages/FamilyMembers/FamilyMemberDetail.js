@@ -42,6 +42,7 @@ import { fetchReports } from '../../store/slices/reportSlice';
 import { fetchMedications, createMedication, updateMedication, deleteMedication } from '../../store/slices/medicationSlice';
 import { fetchMedicalLogs, createMedicalLog, deleteMedicalLog } from '../../store/slices/medicalLogSlice';
 import HospitalAutoComplete from '../../components/common/HospitalAutoComplete';
+import useBreakpoint from '../../hooks/useBreakpoint';
 
 const { TabPane } = Tabs;
 const { TextArea } = Input;
@@ -51,6 +52,7 @@ const FamilyMemberDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { isMobile } = useBreakpoint();
   
   const { currentMember, isLoading, error } = useSelector(state => state.familyMembers);
   const { list: reports, isLoading: reportsLoading } = useSelector(state => state.reports);
@@ -378,7 +380,7 @@ const FamilyMemberDetail = () => {
       >
         <div style={{ marginBottom: 24 }}>
           <Row gutter={24}>
-            <Col span={6}>
+            <Col span={isMobile ? 24 : 6}>
               <div style={{ textAlign: 'center' }}>
                 <Avatar
                   size={120}
@@ -398,30 +400,30 @@ const FamilyMemberDetail = () => {
                 </div>
               </div>
             </Col>
-            <Col span={18}>
+            <Col span={isMobile ? 24 : 18}>
               <Row gutter={16}>
-                <Col span={6}>
+                <Col span={isMobile ? 24 : 6}>
                   <Statistic
                     title="年龄"
                     value={currentMember.age || 0}
                     suffix="岁"
                   />
                 </Col>
-                <Col span={6}>
+                <Col span={isMobile ? 24 : 6}>
                   <Statistic
                     title="身高"
                     value={currentMember.height || 0}
                     suffix="cm"
                   />
                 </Col>
-                <Col span={6}>
+                <Col span={isMobile ? 24 : 6}>
                   <Statistic
                     title="体重"
                     value={currentMember.weight || 0}
                     suffix="kg"
                   />
                 </Col>
-                <Col span={6}>
+                <Col span={isMobile ? 24 : 6}>
                   <div>
                     <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>BMI</div>
                     <div>
@@ -443,7 +445,7 @@ const FamilyMemberDetail = () => {
 
         <Tabs activeKey={activeTab} onChange={setActiveTab}>
           <TabPane tab="基本信息" key="basic" icon={<UserOutlined />}>
-            <Descriptions bordered column={2}>
+            <Descriptions bordered column={isMobile ? 1 : 2}>
               <Descriptions.Item label="姓名">{currentMember.name}</Descriptions.Item>
               <Descriptions.Item label="性别">
                 <Tag color={currentMember.gender === '男' ? 'blue' : 'pink'}>
@@ -498,6 +500,8 @@ const FamilyMemberDetail = () => {
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={handleAddMedication}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
               >
                 添加用药
               </Button>
@@ -508,6 +512,7 @@ const FamilyMemberDetail = () => {
               rowKey="id"
               loading={medicationsLoading}
               pagination={false}
+              scroll={isMobile ? { x: 'max-content' } : undefined}
               locale={{
                 emptyText: (
                   <Empty
@@ -529,6 +534,8 @@ const FamilyMemberDetail = () => {
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={() => navigate(`/reports/upload?memberId=${id}`)}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
               >
                 上传报告
               </Button>
@@ -538,6 +545,7 @@ const FamilyMemberDetail = () => {
               dataSource={reports.filter(report => report.familyMemberId === parseInt(id))}
               rowKey="id"
               loading={reportsLoading}
+              scroll={isMobile ? { x: 'max-content' } : undefined}
               pagination={{
                 pageSize: 10,
                 showSizeChanger: true,
@@ -567,6 +575,8 @@ const FamilyMemberDetail = () => {
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={handleAddMedicalLog}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
               >
                 添加日志
               </Button>
@@ -697,15 +707,28 @@ const FamilyMemberDetail = () => {
             <TextArea rows={3} placeholder="请输入备注说明" />
           </Form.Item>
           <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={isCreatingMedication}>
+            <Space
+              direction={isMobile ? 'vertical' : 'horizontal'}
+              style={isMobile ? { width: '100%' } : undefined}
+            >
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={isCreatingMedication}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
+              >
                 {editingMedication ? '更新' : '创建'}
               </Button>
-              <Button onClick={() => {
-                setMedicationModalVisible(false);
-                medicationForm.resetFields();
-                setEditingMedication(null);
-              }}>
+              <Button
+                onClick={() => {
+                  setMedicationModalVisible(false);
+                  medicationForm.resetFields();
+                  setEditingMedication(null);
+                }}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
+              >
                 取消
               </Button>
             </Space>
@@ -754,7 +777,7 @@ const FamilyMemberDetail = () => {
             <HospitalAutoComplete placeholder="请输入或选择就诊医院" />
           </Form.Item>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={isMobile ? 24 : 12}>
               <Form.Item
                 name="treatmentStartDate"
                 label="治疗开始时间"
@@ -767,7 +790,7 @@ const FamilyMemberDetail = () => {
                 />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={isMobile ? 24 : 12}>
               <Form.Item
                 name="treatmentEndDate"
                 label="治疗结束时间"
@@ -788,14 +811,27 @@ const FamilyMemberDetail = () => {
             <TextArea rows={4} placeholder="请输入详细的医疗行为描述" />
           </Form.Item>
           <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={isCreatingLog}>
+            <Space
+              direction={isMobile ? 'vertical' : 'horizontal'}
+              style={isMobile ? { width: '100%' } : undefined}
+            >
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={isCreatingLog}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
+              >
                 创建
               </Button>
-              <Button onClick={() => {
-                setMedicalLogModalVisible(false);
-                medicalLogForm.resetFields();
-              }}>
+              <Button
+                onClick={() => {
+                  setMedicalLogModalVisible(false);
+                  medicalLogForm.resetFields();
+                }}
+                block={isMobile}
+                style={isMobile ? { height: 44 } : undefined}
+              >
                 取消
               </Button>
             </Space>

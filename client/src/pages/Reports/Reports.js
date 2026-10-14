@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
+  List,
   Button,
   Space,
   Tag,
@@ -29,6 +30,7 @@ import {
 import dayjs from 'dayjs';
 import { fetchReports, deleteReport, clearError } from '../../store/slices/reportSlice';
 import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
+import useBreakpoint from '../../hooks/useBreakpoint';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -36,6 +38,7 @@ const { RangePicker } = DatePicker;
 const Reports = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { isMobile } = useBreakpoint();
   const { list, isLoading, isDeleting, error } = useSelector(state => state.reports);
   const { list: familyMembers } = useSelector(state => state.familyMembers);
   
@@ -217,7 +220,7 @@ const Reports = () => {
       <Card
         title="医疗报告管理"
         extra={
-          <Space>
+          <Space wrap>
             <Button
               icon={<CameraOutlined />}
               onClick={() => navigate('/upload/quick')}
@@ -283,6 +286,49 @@ const Reports = () => {
               上传第一份报告
             </Button>
           </Empty>
+        ) : isMobile ? (
+          // 移动端卡片列表：与桌面 Table 同源（filteredData），点卡片进详情
+          <List
+            dataSource={filteredData}
+            loading={isLoading}
+            renderItem={(r) => {
+              const member = familyMembers.find(m => m.id === r.familyMemberId);
+              return (
+                <Card
+                  size="small"
+                  style={{ marginBottom: 8, cursor: 'pointer' }}
+                  onClick={() => handleView(r.id)}
+                >
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    minHeight: 44
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>
+                        {member?.name || '未知成员'}
+                        {member && (
+                          <Tag color={member.gender === '男' ? 'blue' : 'pink'} style={{ marginLeft: 8 }}>
+                            {member.gender}
+                          </Tag>
+                        )}
+                      </div>
+                      <div style={{ color: '#64748b', fontSize: 12, marginTop: 4 }}>
+                        {dayjs(r.reportDate).format('YYYY-MM-DD')} · {r.hospitalName || '未填医院'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <Tag color={r.indicatorCount ? 'blue' : 'default'}>
+                        {r.indicatorCount || 0} 项指标
+                      </Tag>
+                    </div>
+                  </div>
+                </Card>
+              );
+            }}
+          />
         ) : (
           <Table
             columns={columns}

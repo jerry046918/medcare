@@ -32,6 +32,7 @@ import {
 import dayjs from 'dayjs';
 import { fetchReportDetail } from '../../store/slices/reportSlice';
 import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
+import useBreakpoint from '../../hooks/useBreakpoint';
 
 const { Title, Text } = Typography;
 
@@ -39,6 +40,7 @@ const ReportDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { isMobile } = useBreakpoint();
   
   const { currentReport, isLoading, error } = useSelector(state => state.reports);
   const { list: familyMembers } = useSelector(state => state.familyMembers);
@@ -210,7 +212,7 @@ const ReportDetail = () => {
           </Space>
         }
         extra={
-          <Space>
+          <Space wrap>
             {currentReport.filePath && (
               <Button
                 icon={<DownloadOutlined />}
@@ -231,11 +233,11 @@ const ReportDetail = () => {
       >
         {/* 基本信息 */}
         <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col span={18}>
+          <Col span={isMobile ? 24 : 18}>
             <Descriptions
               title="基本信息"
               bordered
-              column={2}
+              column={isMobile ? 1 : 2}
               size="middle"
             >
               <Descriptions.Item label="家庭成员" span={1}>
@@ -276,7 +278,7 @@ const ReportDetail = () => {
               )}
             </Descriptions>
           </Col>
-          <Col span={6}>
+          <Col span={isMobile ? 24 : 6}>
             <Row gutter={[0, 16]}>
               <Col span={24}>
                 <Card size="small" className="stat-card" style={{ borderLeft: '3px solid #3b82f6' }}>
@@ -336,6 +338,7 @@ const ReportDetail = () => {
               columns={indicatorColumns}
               dataSource={indicatorData}
               rowKey="id"
+              scroll={isMobile ? { x: 'max-content' } : undefined}
               pagination={{
                 pageSize: 10,
                 showSizeChanger: true,

@@ -33,6 +33,7 @@ import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
 import { fetchIndicators } from '../../store/slices/indicatorSlice';
 import IndicatorEditTable, { newIndicatorRow, applyIndicatorChange, checkAbnormalStatus } from '../../components/common/IndicatorEditTable';
 import ocrAPI from '../../api/ocrAPI';
+import useBreakpoint from '../../hooks/useBreakpoint';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -43,6 +44,7 @@ const ReportEdit = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [form] = Form.useForm();
+  const { isMobile } = useBreakpoint();
 
   const { currentReport, isLoading, isUpdating } = useSelector(state => state.reports);
   const { list: familyMembers } = useSelector(state => state.familyMembers);
@@ -278,7 +280,7 @@ const ReportEdit = () => {
           onFinish={handleSubmit}
         >
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={isMobile ? 24 : 12}>
               <Form.Item
                 name="familyMemberId"
                 label="家庭成员"
@@ -293,7 +295,7 @@ const ReportEdit = () => {
                 </Select>
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={isMobile ? 24 : 12}>
               <Form.Item
                 name="reportDate"
                 label="报告日期"
@@ -305,7 +307,7 @@ const ReportEdit = () => {
           </Row>
 
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={isMobile ? 24 : 12}>
               <Form.Item
                 name="hospitalName"
                 label="医院名称"
@@ -314,7 +316,7 @@ const ReportEdit = () => {
                 <Input placeholder="请输入医院名称" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={isMobile ? 24 : 12}>
               <Form.Item
                 name="doctorName"
                 label="医生姓名"
@@ -451,18 +453,23 @@ const ReportEdit = () => {
           />
 
           <Form.Item>
-            <Space>
+            <Space
+              direction={isMobile ? 'vertical' : 'horizontal'}
+              style={isMobile ? { width: '100%' } : undefined}
+            >
               <Button
                 type="primary"
                 htmlType="submit"
                 loading={isUpdating}
                 size="large"
+                block={isMobile}
               >
                 更新报告
               </Button>
               <Button
                 size="large"
                 onClick={() => navigate(`/reports/${id}`)}
+                block={isMobile}
               >
                 取消
               </Button>

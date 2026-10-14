@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,6 +12,7 @@ import {
   Space,
   Typography,
   Empty,
+  Select,
   Spin,
   Tooltip
 } from 'antd';
@@ -32,18 +33,22 @@ import dayjs from 'dayjs';
 import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
 import { fetchReports } from '../../store/slices/reportSlice';
 import { fetchIndicators } from '../../store/slices/indicatorSlice';
+import useBreakpoint from '../../hooks/useBreakpoint';
 
 const { Title, Text } = Typography;
 
 const Dashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { isMobile } = useBreakpoint();
 
-  const { user } = useSelector(state => state.auth);
+  const { user, selfMember } = useSelector(state => state.auth);
   const { list: familyMembers, isLoading: membersLoading } = useSelector(state => state.familyMembers);
   const { list: reports, isLoading: reportsLoading } = useSelector(state => state.reports);
   const { list: indicators, isLoading: indicatorsLoading } = useSelector(state => state.indicators);
 
+  // 成员筛选：spec 4.7 默认展示本人数据；undefined 表示用户未主动选择 → 跟随 selfMember
+  const [memberFilter, setMemberFilter] = useState(undefined);
   useEffect(() => {
     dispatch(fetchFamilyMembers());
     dispatch(fetchReports());
@@ -52,20 +57,44 @@ const Dashboard = () => {
 
   const isLoading = membersLoading || reportsLoading || indicatorsLoading;
 
-  const recentReports = useMemo(() => [...reports]
-    .sort((a, b) => dayjs(b.reportDate).valueOf() - dayjs(a.reportDate).valueOf())
-    .slice(0, 5), [reports]);
+  const activeMemberId = memberFilter !== undefined
+    ? memberFilter
+    : (selfMember?.id ?? 'all');
 
-  const membersNeedAttention = useMemo(() => familyMembers.filter(member => {
+  const scopedMembers = useMemo(() => (
+    activeMemberId === 'all'
+      ? familyMembers
+      : familyMembers.filter(m => m.id === activeMemberId)
+  ), [familyMembers, activeMemberId]);
+
+  const scopedReports = useMemo(() => (
+    activeMemberId === 'all'
+      ? reports
+      : reports.filter(r => r.familyMemberId === activeMemberId)
+  ), [reports, activeMemberId]);
+
+  const recentReports = useMemo(() => [...scopedReports]
+    .sort((a, b) => dayjs(b.reportDate).valueOf() - dayjs(a.reportDate).valueOf())
+    .slice(0, 5), [scopedReports]);
+
+  const membersNeedAttention = useMemo(() => scopedMembers.filter(member => {
     if (!member.bmi) return false;
     const bmi = parseFloat(member.bmi);
     return bmi < 18.5 || bmi >= 28;
-  }), [familyMembers]);
+  }), [scopedMembers]);
+
+  const memberOptions = useMemo(() => [
+    { value: 'all', label: '全部成员' },
+    ...familyMembers.map(m => ({
+      value: m.id,
+      label: m.id === selfMember?.id ? `${m.name}（本人）` : m.name
+    }))
+  ], [familyMembers, selfMember]);
 
   const statCards = [
     {
       title: '家庭成员',
-      value: familyMembers.length,
+      value: scopedMembers.length,
       suffix: '人',
       icon: <TeamOutlined />,
       color: '#3b82f6',
@@ -73,7 +102,7 @@ const Dashboard = () => {
     },
     {
       title: '医疗报告',
-      value: reports.length,
+      value: scopedReports.length,
       suffix: '份',
       icon: <FileTextOutlined />,
       color: '#10b981',
@@ -108,14 +137,20 @@ const Dashboard = () => {
   return (
     <div>
       {/* Welcome Banner */}
-      <div className="welcome-banner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="welcome-banner" style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: isMobile ? 'flex-start' : 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        gap: isMobile ? 12 : 0
+      }}>
         <div style={{ position: 'relative', zIndex: 1 }}>
           <Title level={3}>欢迎回来，{user?.username} 👋</Title>
           <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
             {dayjs().format('YYYY年MM月DD日 dddd')}
           </Text>
         </div>
-        <Space style={{ position: 'relative', zIndex: 1 }}>
+        <Space style={{ position: 'relative', zIndex: 1 }} wrap>
           <Button
             className="welcome-btn"
             icon={<UploadOutlined />}
@@ -133,10 +168,26 @@ const Dashboard = () => {
         </Space>
       </div>
 
-      {/* Stat Cards */}
+      {/* 成员筛选（默认本人，spec 4.7） */}
+      <div style={{
+        marginTop: 16,
+        marginBottom: 16,
+        display: 'flex',
+        justifyContent: 'flex-end'
+      }}>
+        <Select
+          value={activeMemberId}
+          onChange={setMemberFilter}
+          options={memberOptions}
+          style={{ width: isMobile ? '100%' : 200 }}
+          aria-label="按成员筛选"
+        />
+      </div>
+
+      {/* Stat Cards：移动端(<768px)纵向堆叠，桌面(≥768px)保持 2/4 列不变 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {statCards.map((stat, idx) => (
-          <Col xs={12} sm={12} lg={6} key={idx}>
+          <Col xs={24} md={12} lg={6} key={idx}>
             <Card className="stat-card" bodyStyle={{ padding: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
@@ -182,7 +233,7 @@ const Dashboard = () => {
             }
             style={{ height: '100%' }}
           >
-            {familyMembers.length === 0 ? (
+            {scopedMembers.length === 0 ? (
               <Empty
                 description="暂无家庭成员"
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -193,7 +244,7 @@ const Dashboard = () => {
               </Empty>
             ) : (
               <List
-                dataSource={familyMembers.slice(0, 5)}
+                dataSource={scopedMembers.slice(0, 5)}
                 renderItem={(member) => {
                   const needsAttention = membersNeedAttention.some(m => m.id === member.id);
                   return (

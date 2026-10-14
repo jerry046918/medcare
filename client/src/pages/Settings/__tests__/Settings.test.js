@@ -57,17 +57,17 @@ const renderedTabLabels = () =>
   Array.from(document.querySelectorAll('.ant-tabs-tab')).map((el) => el.textContent);
 
 describe('Settings Tabs 角色门控', () => {
-  it('member 账户只有 账户/本人绑定/我的授权/OCR 设置 四个 Tab', () => {
+  it('member 账户只有 账户/本人绑定/我的授权/指标管理/OCR 设置 五个 Tab', () => {
     renderSettings('member');
     const labels = renderedTabLabels();
-    expect(labels).toEqual(['账户', '本人绑定', '我的授权', 'OCR 设置']);
+    expect(labels).toEqual(['账户', '本人绑定', '我的授权', '指标管理', 'OCR 设置']);
   });
 
   it('admin 账户额外看到 邀请码/用户管理/成员合并', () => {
     renderSettings('admin');
     const labels = renderedTabLabels();
     expect(labels).toEqual([
-      '账户', '本人绑定', '我的授权', '邀请码', '用户管理', '成员合并', 'OCR 设置'
+      '账户', '本人绑定', '我的授权', '指标管理', '邀请码', '用户管理', '成员合并', 'OCR 设置'
     ]);
   });
 

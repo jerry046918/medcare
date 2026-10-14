@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Card, Tabs } from 'antd';
 import {
+  BarChartOutlined,
   IdcardOutlined,
   LinkOutlined,
   MergeCellsOutlined,
@@ -16,6 +17,7 @@ import AccessPanel from './AccessPanel';
 import InvitePanel from './InvitePanel';
 import UsersPanel from './UsersPanel';
 import MergePanel from './MergePanel';
+import IndicatorPanel from './IndicatorPanel';
 import OCRSettings from './OCRSettings';
 
 // v2 设置页：仅作为 Tabs 壳组合各功能面板；
@@ -28,6 +30,7 @@ const Settings = () => {
     { key: 'account', label: '账户', icon: <UserOutlined />, children: <AccountPanel /> },
     { key: 'selfBinding', label: '本人绑定', icon: <IdcardOutlined />, children: <SelfBindingPanel /> },
     { key: 'access', label: '我的授权', icon: <LinkOutlined />, children: <AccessPanel /> },
+    { key: 'indicators', label: '指标管理', icon: <BarChartOutlined />, children: <IndicatorPanel /> },
     ...(role === 'admin' ? [
       { key: 'invites', label: '邀请码', icon: <SafetyCertificateOutlined />, children: <InvitePanel /> },
       { key: 'users', label: '用户管理', icon: <TeamOutlined />, children: <UsersPanel /> },

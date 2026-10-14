@@ -31,6 +31,11 @@ const authAPI = {
     return api.post('/auth/change-password', data);
   },
 
+  // 更新个人资料（v2：displayName，仅允许改自己的）
+  updateProfile: (data) => {
+    return api.post('/auth/update-profile', data);
+  },
+
   // 登出（客户端处理）
   logout: () => {
     localStorage.removeItem('token');

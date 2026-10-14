@@ -5,7 +5,7 @@ const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../util
 
 // v2：成员为全局资源，账户经 UserMemberLink（self/owner/editor/viewer）获得可见性与权限，
 // 权限判定统一走 accessService 权限矩阵；legacy 列（family_members.userId/relationship）
-// 过渡期保留，Task 13 切换 report/medication/log 服务后删除。
+// 已随 Task 13 的服务切换从模型与开发库中删除，关系视角只存于 link。
 
 // 成员可见列表（accessService 矩阵）+ 每人 reportCount（与 v1 响应字段兼容）
 async function listByUser(userId) {
@@ -81,9 +81,7 @@ async function create(userId, body) {
     const member = await FamilyMember.create(
       {
         name: cleanName, gender, birthday: birthday || null,
-        weight: validatedWeight, height: validatedHeight,
-        // 过渡期写 legacy 列,Task 13 删除（reportService/medicationService/medicalLogService 仍按 FamilyMember.userId 过滤）
-        userId, relationship: cleanRel
+        weight: validatedWeight, height: validatedHeight
       },
       { transaction: t });
     await UserMemberLink.create(
@@ -232,7 +230,8 @@ async function revokeLink(userId, memberId, linkId) {
 async function merge(userId, { sourceId, targetId }) {
   const user = await User.findByPk(userId, { attributes: ['role'] });
   if (user.role !== 'admin') throw new HttpError(403, '只有管理员可以合并成员');
-  if (!sourceId || !targetId || sourceId === targetId) throw new HttpError(400, '无效的合并参数');
+  // 字符串比较:"5" 与 5 视为同参(Task 11 评审修正)
+  if (!sourceId || !targetId || String(sourceId) === String(targetId)) throw new HttpError(400, '无效的合并参数');
   const source = await FamilyMember.findByPk(sourceId);
   const target = await FamilyMember.findByPk(targetId);
   if (!source || !target) throw new HttpError(404, '成员不存在');
@@ -247,8 +246,16 @@ async function merge(userId, { sourceId, targetId }) {
       const existing = await UserMemberLink.findOne({
         where: { memberId: targetId, userId: link.userId }, transaction: t });
       if (!existing) {
+        // source 的 self link 用户在 target 无 link:若 target 已有他人 self link,
+        // 迁移时降级为 owner,保持"一成员至多一个 self"不变量(Task 11 评审修正)
+        let role = link.role;
+        if (role === 'self') {
+          const targetSelf = await UserMemberLink.findOne(
+            { where: { memberId: targetId, role: 'self' }, transaction: t });
+          if (targetSelf) role = 'owner';
+        }
         await UserMemberLink.create(
-          { userId: link.userId, memberId: targetId, role: link.role, relationship: link.relationship },
+          { userId: link.userId, memberId: targetId, role, relationship: link.relationship },
           { transaction: t });
       } else if (link.role === 'self') {
         // source 的 self link 用户:其在 target 上的低权 link 升为 self(同用户同成员唯一,原地更新);

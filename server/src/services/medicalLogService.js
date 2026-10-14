@@ -1,4 +1,5 @@
 const { MedicalLog, FamilyMember, MedicalReport, Medication } = require('../models');
+const accessService = require('./accessService');
 const HttpError = require('../utils/httpError');
 const { sanitizeInput, escapeHtml } = require('../utils/security');
 
@@ -10,20 +11,23 @@ function sanitizeLogData(data) {
   return sanitized;
 }
 
+// v2 权限门禁：assertAccess 404（成员不存在/不可见）映射回 v1 文案保持兼容；403 原样抛出
+async function assertLogAccess(userId, memberId, level, notFoundMessage) {
+  try {
+    await accessService.assertAccess(userId, memberId, level);
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) {
+      throw new HttpError(404, notFoundMessage);
+    }
+    throw error;
+  }
+}
+
 // 获取指定成员的所有医疗日志
 async function listByMember(userId, memberId) {
   try {
-    // 验证家庭成员属于当前用户
-    const familyMember = await FamilyMember.findOne({
-      where: {
-        id: memberId,
-        userId
-      }
-    });
-
-    if (!familyMember) {
-      throw new HttpError(404, '家庭成员不存在或无权限访问');
-    }
+    // v2：成员需对当前用户可见（view 级）
+    await assertLogAccess(userId, memberId, 'view', '家庭成员不存在或无权限访问');
 
     return await MedicalLog.findAll({
       where: { memberId },
@@ -60,8 +64,7 @@ async function getById(userId, id) {
       include: [
         {
           model: FamilyMember,
-          as: 'familyMember',
-          where: { userId }
+          as: 'familyMember'
         },
         {
           model: MedicalReport,
@@ -79,6 +82,9 @@ async function getById(userId, id) {
     if (!log) {
       throw new HttpError(404, '医疗日志不存在或无权限访问');
     }
+
+    // v2：成员需对当前用户可见（view 级）
+    await assertLogAccess(userId, log.memberId, 'view', '医疗日志不存在或无权限访问');
 
     return log;
   } catch (error) {
@@ -105,17 +111,8 @@ async function create(userId, body) {
       throw new HttpError(400, '手动日志类型必须是：住院治疗、门诊治疗或急诊治疗');
     }
 
-    // 验证家庭成员是否属于当前用户
-    const familyMember = await FamilyMember.findOne({
-      where: {
-        id: memberId,
-        userId
-      }
-    });
-
-    if (!familyMember) {
-      throw new HttpError(404, '家庭成员不存在或无权限访问');
-    }
+    // v2：成员需对当前用户具备 edit 权限（self/owner/editor/admin）
+    await assertLogAccess(userId, memberId, 'edit', '家庭成员不存在或无权限访问');
 
     // 处理日期
     const treatmentStart = treatmentStartDate ? new Date(treatmentStartDate) : new Date();
@@ -173,14 +170,16 @@ async function update(userId, id, body) {
       where: { id },
       include: [{
         model: FamilyMember,
-        as: 'familyMember',
-        where: { userId }
+        as: 'familyMember'
       }]
     });
 
     if (!log) {
       throw new HttpError(404, '医疗日志不存在或无权限访问');
     }
+
+    // v2：成员需对当前用户具备 edit 权限
+    await assertLogAccess(userId, log.memberId, 'edit', '医疗日志不存在或无权限访问');
 
     // 只允许编辑手动添加的日志
     const manualTypes = ['hospitalization', 'outpatient', 'emergency'];
@@ -220,14 +219,16 @@ async function remove(userId, id) {
       where: { id },
       include: [{
         model: FamilyMember,
-        as: 'familyMember',
-        where: { userId }
+        as: 'familyMember'
       }]
     });
 
     if (!log) {
       throw new HttpError(404, '医疗日志不存在或无权限访问');
     }
+
+    // v2：删除需要成员 edit 权限
+    await assertLogAccess(userId, log.memberId, 'edit', '医疗日志不存在或无权限访问');
 
     // 只允许删除手动添加的日志
     const manualTypes = ['hospitalization', 'outpatient', 'emergency'];

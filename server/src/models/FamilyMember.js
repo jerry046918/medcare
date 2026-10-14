@@ -19,15 +19,6 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM('男', '女', '其他'),
       allowNull: false
     },
-    relationship: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      validate: {
-        len: [1, 20],
-        notEmpty: true
-      },
-      comment: '与管理员的关系，如：本人、配偶、父亲、母亲、儿子、女儿等'
-    },
     birthday: {
       type: DataTypes.DATEONLY,
       allowNull: true,
@@ -53,14 +44,7 @@ module.exports = (sequelize) => {
       },
       comment: '身高，单位：厘米'
     },
-    userId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
-    },
+    // v2：归属与关系视角经 UserMemberLink（self/owner/editor/viewer），不再有 userId/relationship 列
     createdAt: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
@@ -72,9 +56,6 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'family_members',
     indexes: [
-      {
-        fields: ['userId']
-      },
       {
         fields: ['name']
       }

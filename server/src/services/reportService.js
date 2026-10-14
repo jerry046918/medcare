@@ -2,6 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const { MedicalReport, FamilyMember, ReportIndicatorData, MedicalIndicator, MedicalLog, sequelize } = require('../models');
+const accessService = require('./accessService');
 const HttpError = require('../utils/httpError');
 const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../utils/security');
 
@@ -40,6 +41,21 @@ function parseIndicatorData(body) {
 function withCompatFields(reportData) {
   reportData.familyMemberId = reportData.memberId;
   return reportData;
+}
+
+/**
+ * v2 权限门禁：assertAccess 404（成员不存在/不可见）映射回各动词的 v1 文案保持兼容；
+ * 403（无对应权限级别）原样抛出
+ */
+async function assertReportAccess(userId, memberId, level, notFoundMessage) {
+  try {
+    await accessService.assertAccess(userId, memberId, level);
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) {
+      throw new HttpError(404, notFoundMessage);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -86,14 +102,15 @@ const reportUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// 获取所有报告
+// 获取所有报告（v2：按可见成员 ids 过滤，admin 见全部）
 async function listByUser(userId) {
+  const visibleIds = await accessService.getVisibleMemberIds(userId);
   const reports = await MedicalReport.findAll({
+    where: { memberId: visibleIds },
     include: [
       {
         model: FamilyMember,
         as: 'familyMember',
-        where: { userId },
         attributes: ['id', 'name', 'gender']
       },
       {
@@ -130,7 +147,6 @@ async function getById(userId, id) {
       {
         model: FamilyMember,
         as: 'familyMember',
-        where: { userId },
         attributes: ['id', 'name', 'gender']
       },
       {
@@ -147,6 +163,8 @@ async function getById(userId, id) {
   if (!report) {
     throw new HttpError(404, '报告不存在');
   }
+
+  await assertReportAccess(userId, report.memberId, 'view', '报告不存在');
 
   return withCompatFields(report.toJSON());
 }
@@ -174,18 +192,8 @@ async function create(userId, body, file) {
   });
 
   const transactionResult = await withTransaction(async (transaction) => {
-    // 验证家庭成员是否属于当前用户
-    const familyMember = await FamilyMember.findOne({
-      where: {
-        id: validFamilyMemberId,
-        userId
-      },
-      transaction
-    });
-
-    if (!familyMember) {
-      throw new HttpError(404, '家庭成员不存在或无权限访问');
-    }
+    // v2：成员需对当前用户具备 edit 权限（self/owner/editor/admin）
+    await assertReportAccess(userId, validFamilyMemberId, 'edit', '家庭成员不存在或无权限访问');
 
     // 创建报告
     const report = await MedicalReport.create({
@@ -290,17 +298,15 @@ async function update(userId, id, body, file) {
   }
 
   const report = await MedicalReport.findOne({
-    where: { id: reportId },
-    include: [{
-      model: FamilyMember,
-      as: 'familyMember',
-      where: { userId }
-    }]
+    where: { id: reportId }
   });
 
   if (!report) {
     throw new HttpError(404, '报告不存在或无权限访问');
   }
+
+  // v2：成员需对当前用户具备 edit 权限
+  await assertReportAccess(userId, report.memberId, 'edit', '报告不存在或无权限访问');
 
   // 消毒输入
   const sanitizedData = sanitizeReportData({
@@ -399,17 +405,15 @@ async function remove(userId, id) {
   }
 
   const report = await MedicalReport.findOne({
-    where: { id: reportId },
-    include: [{
-      model: FamilyMember,
-      as: 'familyMember',
-      where: { userId }
-    }]
+    where: { id: reportId }
   });
 
   if (!report) {
     throw new HttpError(404, '报告不存在或无权限访问');
   }
+
+  // v2：删除需要成员 edit 权限
+  await assertReportAccess(userId, report.memberId, 'edit', '报告不存在或无权限访问');
 
   // 删除关联的指标数据
   await ReportIndicatorData.destroy({

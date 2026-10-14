@@ -95,7 +95,7 @@ async function migrateV2(sequelize) {
   return { skipped: false, members: members.length };
 }
 
-// Task 13 实现删除 userId/relationship 列;此版本为占位
+// 删除 userId/relationship legacy 列（表重建;开发库经 --finalize 执行,Task 13 起启用）
 async function finalizeV2(sequelize) {
   // 幂等判断:family_members 已无 userId 列即视为已 finalize
   const [cols] = await sequelize.query('PRAGMA table_info(family_members)');

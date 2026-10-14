@@ -161,6 +161,39 @@ test('merge:target 已有 self link 时保留,非 self link 迁移不抢占', as
   assert.ok(!list.body.data.some((m) => m.id === src.body.data.id), 'source 成员已删除');
 });
 
+// Task 13 评审修正:merge 同参判定用 String 比较;source 的 self link 用户在 target 无 link
+// 且 target 已有他人 self link 时,迁移 link 降级为 owner(保持一成员至多一个 self)
+test('merge:字符串同参 400;self link 迁移遇 target 已有他人 self 时降级 owner', async () => {
+  const { app, admin } = await setup();
+  // (a) '999999' 与 999999 视为同参 → 400(修复前 strict 相等会继续执行到 404)
+  const sameArg = await auth(request(app).post('/api/members/merge'), admin.token)
+    .send({ sourceId: '999999', targetId: 999999 });
+  assert.strictEqual(sameArg.status, 400);
+
+  // (b) target 上已有 w 的 self link;source 是 u 的本人成员(self link)
+  const u = await makeUser(app, admin, 'mergeSelfC');
+  const w = await makeUser(app, admin, 'mergeSelfC2');
+  const tgt = await auth(request(app).post('/api/members'), admin.token)
+    .send({ name: '合并目标C', gender: '男', relationship: '父亲' });
+  const bindW = await auth(request(app).post(`/api/members/${tgt.body.data.id}/links`), admin.token)
+    .send({ granteeUserId: w.userId, role: 'self' });
+  assert.strictEqual(bindW.status, 201);
+  const meList = await auth(request(app).get('/api/members'), u.token);
+  const selfMember = meList.body.data.find((m) => m.role === 'self');
+
+  const merged = await auth(request(app).post('/api/members/merge'), admin.token)
+    .send({ sourceId: selfMember.id, targetId: tgt.body.data.id });
+  assert.strictEqual(merged.status, 200);
+
+  const links = await auth(request(app).get(`/api/members/${tgt.body.data.id}/links`), admin.token);
+  assert.strictEqual(links.status, 200);
+  const selfLinks = links.body.data.filter((l) => l.role === 'self');
+  assert.strictEqual(selfLinks.length, 1, 'target 仍只有一个 self link');
+  assert.strictEqual(selfLinks[0].userId, w.userId, '保留 target 原有 self');
+  const uLink = links.body.data.find((l) => l.userId === u.userId);
+  assert.strictEqual(uLink.role, 'owner', 'source 的 self link 迁移时降级为 owner');
+});
+
 // admin 授权矩阵:可授任意角色;self 仅当成员未绑定;grantee 不存在 → 400
 test('admin 可授 owner/self;self 仅当成员未绑定;grantee 不存在 400', async () => {
   const { app, admin } = await setup();

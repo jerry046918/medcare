@@ -1,4 +1,5 @@
 const { Medication, FamilyMember, MedicalLog } = require('../models');
+const accessService = require('./accessService');
 const HttpError = require('../utils/httpError');
 const { sanitizeInput, escapeHtml } = require('../utils/security');
 
@@ -11,20 +12,23 @@ function sanitizeMedicationData(data) {
   return sanitized;
 }
 
+// v2 权限门禁：assertAccess 404（成员不存在/不可见）映射回 v1 文案保持兼容；403 原样抛出
+async function assertMedicationAccess(userId, memberId, level, notFoundMessage) {
+  try {
+    await accessService.assertAccess(userId, memberId, level);
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) {
+      throw new HttpError(404, notFoundMessage);
+    }
+    throw error;
+  }
+}
+
 // 获取指定成员的所有用药记录
 async function listByMember(userId, memberId) {
   try {
-    // 验证家庭成员属于当前用户
-    const familyMember = await FamilyMember.findOne({
-      where: {
-        id: memberId,
-        userId
-      }
-    });
-
-    if (!familyMember) {
-      throw new HttpError(404, '家庭成员不存在或无权限访问');
-    }
+    // v2：成员需对当前用户可见（view 级）
+    await assertMedicationAccess(userId, memberId, 'view', '家庭成员不存在或无权限访问');
 
     return await Medication.findAll({
       where: { memberId },
@@ -44,14 +48,16 @@ async function getById(userId, id) {
       where: { id },
       include: [{
         model: FamilyMember,
-        as: 'familyMember',
-        where: { userId }
+        as: 'familyMember'
       }]
     });
 
     if (!medication) {
       throw new HttpError(404, '用药记录不存在或无权限访问');
     }
+
+    // v2：成员需对当前用户可见（view 级）
+    await assertMedicationAccess(userId, medication.memberId, 'view', '用药记录不存在或无权限访问');
 
     return medication;
   } catch (error) {
@@ -72,17 +78,8 @@ async function create(userId, body) {
       throw new HttpError(400, '家庭成员和药品名称为必填字段');
     }
 
-    // 验证家庭成员是否属于当前用户
-    const familyMember = await FamilyMember.findOne({
-      where: {
-        id: memberId,
-        userId
-      }
-    });
-
-    if (!familyMember) {
-      throw new HttpError(404, '家庭成员不存在或无权限访问');
-    }
+    // v2：成员需对当前用户具备 edit 权限（self/owner/editor/admin）
+    await assertMedicationAccess(userId, memberId, 'edit', '家庭成员不存在或无权限访问');
 
     const medication = await Medication.create({
       memberId,
@@ -122,14 +119,16 @@ async function update(userId, id, body) {
       where: { id },
       include: [{
         model: FamilyMember,
-        as: 'familyMember',
-        where: { userId }
+        as: 'familyMember'
       }]
     });
 
     if (!medication) {
       throw new HttpError(404, '用药记录不存在或无权限访问');
     }
+
+    // v2：成员需对当前用户具备 edit 权限
+    await assertMedicationAccess(userId, medication.memberId, 'edit', '用药记录不存在或无权限访问');
 
     const previousIsActive = medication.isActive;
 
@@ -169,14 +168,16 @@ async function remove(userId, id) {
       where: { id },
       include: [{
         model: FamilyMember,
-        as: 'familyMember',
-        where: { userId }
+        as: 'familyMember'
       }]
     });
 
     if (!medication) {
       throw new HttpError(404, '用药记录不存在或无权限访问');
     }
+
+    // v2：删除需要成员 edit 权限
+    await assertMedicationAccess(userId, medication.memberId, 'edit', '用药记录不存在或无权限访问');
 
     await medication.destroy();
   } catch (error) {

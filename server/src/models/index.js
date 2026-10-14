@@ -26,13 +26,7 @@ function buildModels(sequelize) {
   User.hasMany(InviteCode, { foreignKey: 'createdById', as: 'createdInvites' });
 
   // 定义关联关系
-  // 家庭成员属于用户
-  FamilyMember.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-  User.hasMany(FamilyMember, {
-    foreignKey: 'userId',
-    as: 'familyMembers',
-    onDelete: 'CASCADE' // 删除用户时级联删除家庭成员
-  });
+  // （v2：成员归属与关系视角经 UserMemberLink，见上方 belongsToMany；旧 FamilyMember↔User 单外键关联已删除）
 
   // 医疗报告属于家庭成员
   MedicalReport.belongsTo(FamilyMember, { foreignKey: 'memberId', as: 'familyMember' });

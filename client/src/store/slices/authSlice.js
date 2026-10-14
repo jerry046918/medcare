@@ -92,8 +92,8 @@ export const register = createAsyncThunk(
   async (userData, { rejectWithValue }) => {
     try {
       const response = await authAPI.register(userData);
-      // v2 响应：data = { user(含 role), token }；selfMember 由注册事务绑定，
-      // 响应中可能缺失，缺省为 null（会话恢复时由 /auth/me 补齐）
+      // v2 响应：data = { user(含 role), token, selfMember }；selfMember 为注册事务
+      // 绑定的本人成员，缺省为 null（兼容旧响应，会话恢复时由 /auth/me 补齐）
       const { user, token, selfMember } = response.data.data;
       // 同步 token 到 localStorage
       syncTokenToStorage(token);

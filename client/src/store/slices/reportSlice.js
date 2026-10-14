@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import reportAPI from '../../services/reportAPI';
+import reportAPI from '../../api/reportAPI';
 
 // 异步thunk：获取所有报告
 export const fetchReports = createAsyncThunk(

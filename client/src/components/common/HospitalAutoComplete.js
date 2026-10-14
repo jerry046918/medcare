@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AutoComplete, Spin } from 'antd';
-import { searchHospitals } from '../../services/hospitalAPI';
+import { searchHospitals } from '../../api/hospitalAPI';
 
 const HospitalAutoComplete = ({ value, onChange, placeholder = '请输入或选择医院', ...restProps }) => {
   const [options, setOptions] = useState([]);

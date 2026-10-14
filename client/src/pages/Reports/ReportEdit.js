@@ -36,7 +36,7 @@ import dayjs from 'dayjs';
 import { fetchReportDetail, updateReport } from '../../store/slices/reportSlice';
 import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
 import { fetchIndicators } from '../../store/slices/indicatorSlice';
-import ocrAPI from '../../services/ocrAPI';
+import ocrAPI from '../../api/ocrAPI';
 
 const { Option } = Select;
 const { TextArea } = Input;

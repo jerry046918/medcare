@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import familyMemberAPI from '../../services/familyMemberAPI';
+import familyMemberAPI from '../../api/familyMemberAPI';
 
 // 异步thunk：获取所有家庭成员
 export const fetchFamilyMembers = createAsyncThunk(

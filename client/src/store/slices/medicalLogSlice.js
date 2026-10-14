@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import medicalLogAPI from '../../services/medicalLogAPI';
+import medicalLogAPI from '../../api/medicalLogAPI';
 
 // 获取指定成员的医疗日志
 export const fetchMedicalLogs = createAsyncThunk(

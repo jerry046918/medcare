@@ -24,7 +24,7 @@ import {
   CloseCircleOutlined,
   SaveOutlined
 } from '@ant-design/icons';
-import api from '../../services/api';
+import api from '../../api/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { Password } = Input;

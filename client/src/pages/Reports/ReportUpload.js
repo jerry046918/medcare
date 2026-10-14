@@ -35,7 +35,7 @@ import { createReport } from '../../store/slices/reportSlice';
 import { fetchFamilyMembers } from '../../store/slices/familyMemberSlice';
 import { fetchIndicators } from '../../store/slices/indicatorSlice';
 import HospitalAutoComplete from '../../components/common/HospitalAutoComplete';
-import ocrAPI from '../../services/ocrAPI';
+import ocrAPI from '../../api/ocrAPI';
 const { Option } = Select;
 const { TextArea } = Input;
 const { Dragger } = Upload;

@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import medicationAPI from '../../services/medicationAPI';
+import medicationAPI from '../../api/medicationAPI';
 
 // 获取指定成员的用药记录
 export const fetchMedications = createAsyncThunk(

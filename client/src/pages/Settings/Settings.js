@@ -43,7 +43,7 @@ import { logout } from '../../store/slices/authSlice';
 import { fetchIndicators, createIndicator, updateIndicator, deleteIndicator, clearError } from '../../store/slices/indicatorSlice';
 import { useNavigate } from 'react-router-dom';
 import OCRSettings from './OCRSettings';
-import authAPI from '../../services/authAPI';
+import authAPI from '../../api/authAPI';
 
 const { Title, Text } = Typography;
 const { Option } = Select;

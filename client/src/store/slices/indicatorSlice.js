@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import indicatorAPI from '../../services/indicatorAPI';
+import indicatorAPI from '../../api/indicatorAPI';
 
 // 异步thunk：获取所有指标
 export const fetchIndicators = createAsyncThunk(

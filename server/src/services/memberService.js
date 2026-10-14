@@ -1,58 +1,33 @@
-const { FamilyMember, MedicalReport, ReportIndicatorData, MedicalIndicator } = require('../models');
+const { FamilyMember, UserMemberLink, MedicalReport, ReportIndicatorData, MedicalIndicator, sequelize } = require('../models');
+const accessService = require('./accessService');
 const HttpError = require('../utils/httpError');
 const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../utils/security');
 
-/**
- * 消毒家庭成员数据
- */
-function sanitizeMemberData(data) {
-  const sanitized = { ...data };
+// v2：成员为全局资源，账户经 UserMemberLink（self/owner/editor/viewer）获得可见性与权限，
+// 权限判定统一走 accessService 权限矩阵；legacy 列（family_members.userId/relationship）
+// 过渡期保留，Task 13 切换 report/medication/log 服务后删除。
 
-  if (sanitized.name) {
-    sanitized.name = escapeHtml(sanitizeInput(sanitized.name, { maxLength: 50 }));
-  }
-  if (sanitized.relationship) {
-    sanitized.relationship = escapeHtml(sanitizeInput(sanitized.relationship, { maxLength: 20 }));
-  }
-
-  return sanitized;
-}
-
-// 获取所有家庭成员（含 age/bmi/reportCount 计算字段）
+// 成员可见列表（accessService 矩阵）+ 每人 reportCount（与 v1 响应字段兼容）
 async function listByUser(userId) {
-  const familyMembers = await FamilyMember.findAll({
-    where: { userId },
-    order: [['createdAt', 'DESC']],
-    include: [{
-      model: MedicalReport,
-      as: 'reports',
-      attributes: ['id', 'reportDate', 'hospitalName']
-    }]
+  const members = await accessService.listVisibleMembers(userId);
+  const counts = await MedicalReport.findAll({
+    attributes: ['memberId', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+    group: ['memberId']
   });
-
-  // 添加计算字段
-  return familyMembers.map(member => {
-    const memberData = member.toJSON();
-    memberData.age = member.getAge();
-    memberData.bmi = member.getBMI();
-    memberData.reportCount = memberData.reports ? memberData.reports.length : 0;
-    return memberData;
-  });
+  const countMap = new Map(counts.map((c) => [c.memberId, Number(c.get('count'))]));
+  return members.map((m) => ({ ...m, reportCount: countMap.get(m.id) || 0 }));
 }
 
-// 获取单个家庭成员详情
+// 单个成员详情（assertAccess view；reports/indicatorData include 形状沿用 v1）
 async function getById(userId, id) {
-  // 验证 ID
   const memberId = validateId(id);
   if (!memberId) {
     throw new HttpError(400, '无效的成员ID');
   }
 
-  const familyMember = await FamilyMember.findOne({
-    where: {
-      id: memberId,
-      userId
-    },
+  await accessService.assertAccess(userId, memberId, 'view');
+
+  const familyMember = await FamilyMember.findByPk(memberId, {
     include: [{
       model: MedicalReport,
       as: 'reports',
@@ -69,7 +44,7 @@ async function getById(userId, id) {
   });
 
   if (!familyMember) {
-    throw new HttpError(404, '家庭成员不存在');
+    throw new HttpError(404, '成员不存在');
   }
 
   const memberData = familyMember.toJSON();
@@ -79,30 +54,18 @@ async function getById(userId, id) {
   return memberData;
 }
 
-// 创建家庭成员
-async function create(userId, data) {
-  const { name, gender, relationship, birthday, weight, height } = data;
+// 创建全局成员 + 我的 owner link（relationship 存 link 上）
+async function create(userId, body) {
+  const { name, gender, relationship, birthday, weight, height } = body;
 
-  // 消毒输入
-  const sanitizedData = sanitizeMemberData({ name, relationship });
+  const cleanName = escapeHtml(sanitizeInput(name, { maxLength: 50 }));
+  const cleanRel = escapeHtml(sanitizeInput(relationship || '家人', { maxLength: 20 }));
 
-  // 验证必填字段
-  if (!sanitizedData.name || !gender || !sanitizedData.relationship) {
-    throw new HttpError(400, '姓名、性别和关系为必填字段');
-  }
+  if (!cleanName) throw new HttpError(400, '姓名为必填字段');
+  if (!['男', '女', '其他'].includes(gender)) throw new HttpError(400, '无效的性别值');
+  if (birthday && !validateDate(birthday)) throw new HttpError(400, '无效的生日日期');
 
-  // 验证性别
-  const validGenders = ['男', '女', '其他'];
-  if (!validGenders.includes(gender)) {
-    throw new HttpError(400, '无效的性别值');
-  }
-
-  // 验证生日（如果提供）
-  if (birthday && !validateDate(birthday)) {
-    throw new HttpError(400, '无效的生日日期');
-  }
-
-  // 验证体重和身高（如果提供）
+  // weight/height 校验沿用 v1 实现(0< w ≤500, 0< h ≤300)
   const validatedWeight = weight !== undefined ? parseFloat(weight) : null;
   const validatedHeight = height !== undefined ? parseFloat(height) : null;
 
@@ -114,117 +77,97 @@ async function create(userId, data) {
     throw new HttpError(400, '无效的身高值');
   }
 
-  const familyMember = await FamilyMember.create({
-    name: sanitizedData.name,
-    gender,
-    relationship: sanitizedData.relationship,
-    birthday: birthday || null,
-    weight: validatedWeight,
-    height: validatedHeight,
-    userId
+  return sequelize.transaction(async (t) => {
+    const member = await FamilyMember.create(
+      {
+        name: cleanName, gender, birthday: birthday || null,
+        weight: validatedWeight, height: validatedHeight,
+        // 过渡期写 legacy 列,Task 13 删除（reportService/medicationService/medicalLogService 仍按 FamilyMember.userId 过滤）
+        userId, relationship: cleanRel
+      },
+      { transaction: t });
+    await UserMemberLink.create(
+      { userId, memberId: member.id, role: 'owner', relationship: cleanRel },
+      { transaction: t });
+    const data = member.toJSON();
+    data.age = member.getAge();
+    data.bmi = member.getBMI();
+    data.role = 'owner';
+    data.relationship = cleanRel;
+    return data;
   });
-
-  const memberData = familyMember.toJSON();
-  memberData.age = familyMember.getAge();
-  memberData.bmi = familyMember.getBMI();
-
-  return memberData;
 }
 
-// 更新家庭成员
-async function update(userId, id, data) {
-  // 验证 ID
+// 编辑成员资料（manage 矩阵）；若带 relationship 且我的 role ∈ {self, owner} → 更新我的 link
+async function update(userId, id, body) {
   const memberId = validateId(id);
   if (!memberId) {
     throw new HttpError(400, '无效的成员ID');
   }
 
-  const { name, gender, relationship, birthday, weight, height } = data;
+  const role = await accessService.assertAccess(userId, memberId, 'manage');
+  const member = await FamilyMember.findByPk(memberId);
+  if (!member) throw new HttpError(404, '成员不存在');
 
-  const familyMember = await FamilyMember.findOne({
-    where: {
-      id: memberId,
-      userId
-    }
+  const { name, gender, relationship, birthday, weight, height } = body;
+  const cleanName = name !== undefined ? escapeHtml(sanitizeInput(name, { maxLength: 50 })) : member.name;
+  if (gender && !['男', '女', '其他'].includes(gender)) throw new HttpError(400, '无效的性别值');
+  if (birthday !== undefined && birthday !== null && !validateDate(birthday)) throw new HttpError(400, '无效的生日日期');
+  const w = weight !== undefined ? parseFloat(weight) : member.weight;
+  const h = height !== undefined ? parseFloat(height) : member.height;
+  if (w !== null && (isNaN(w) || w <= 0 || w > 500)) throw new HttpError(400, '无效的体重值');
+  if (h !== null && (isNaN(h) || h <= 0 || h > 300)) throw new HttpError(400, '无效的身高值');
+
+  await member.update({
+    name: cleanName || member.name,
+    gender: gender || member.gender,
+    birthday: birthday !== undefined ? birthday : member.birthday,
+    weight: w, height: h
   });
 
-  if (!familyMember) {
-    throw new HttpError(404, '家庭成员不存在');
+  // 视角关系：仅 self/owner 可改自己的 link.relationship
+  if (relationship && (role === 'self' || role === 'owner')) {
+    await UserMemberLink.update(
+      { relationship: escapeHtml(sanitizeInput(relationship, { maxLength: 20 })) },
+      { where: { userId, memberId } });
   }
 
-  // 消毒输入
-  const sanitizedData = sanitizeMemberData({ name, relationship });
-
-  // 验证性别（如果提供）
-  if (gender) {
-    const validGenders = ['男', '女', '其他'];
-    if (!validGenders.includes(gender)) {
-      throw new HttpError(400, '无效的性别值');
-    }
-  }
-
-  // 验证生日（如果提供）
-  if (birthday !== undefined && birthday !== null && !validateDate(birthday)) {
-    throw new HttpError(400, '无效的生日日期');
-  }
-
-  // 验证体重和身高（如果提供）
-  const validatedWeight = weight !== undefined ? parseFloat(weight) : familyMember.weight;
-  const validatedHeight = height !== undefined ? parseFloat(height) : familyMember.height;
-
-  if (validatedWeight !== null && (isNaN(validatedWeight) || validatedWeight <= 0 || validatedWeight > 500)) {
-    throw new HttpError(400, '无效的体重值');
-  }
-
-  if (validatedHeight !== null && (isNaN(validatedHeight) || validatedHeight <= 0 || validatedHeight > 300)) {
-    throw new HttpError(400, '无效的身高值');
-  }
-
-  await familyMember.update({
-    name: sanitizedData.name || familyMember.name,
-    gender: gender || familyMember.gender,
-    relationship: sanitizedData.relationship || familyMember.relationship,
-    birthday: birthday !== undefined ? birthday : familyMember.birthday,
-    weight: validatedWeight,
-    height: validatedHeight
-  });
-
-  const memberData = familyMember.toJSON();
-  memberData.age = familyMember.getAge();
-  memberData.bmi = familyMember.getBMI();
-
-  return memberData;
+  const data = member.toJSON();
+  data.age = member.getAge();
+  data.bmi = member.getBMI();
+  return data;
 }
 
-// 删除家庭成员
+// 删除成员：owner/admin 专属；已绑定账户（self link）→ 400 先拒；有报告 → 400；
+// 删除时级联删 links + 成员（事务）
 async function remove(userId, id) {
-  // 验证 ID
   const memberId = validateId(id);
   if (!memberId) {
     throw new HttpError(400, '无效的成员ID');
   }
 
-  const familyMember = await FamilyMember.findOne({
-    where: {
-      id: memberId,
-      userId
-    }
-  });
+  const member = await FamilyMember.findByPk(memberId);
+  if (!member) throw new HttpError(404, '成员不存在');
 
-  if (!familyMember) {
-    throw new HttpError(404, '家庭成员不存在');
-  }
+  const role = await accessService.getMemberRole(userId, memberId);
+  if (!role) throw new HttpError(404, '成员不存在'); // 无可见性 → 与不存在同响应
 
-  // 检查是否有关联的医疗报告
-  const reportCount = await MedicalReport.count({
-    where: { memberId: memberId }
-  });
+  // self link 判定先于角色门槛：本人/已绑定成员一律拒删（400 而非 403）
+  const selfLink = await UserMemberLink.findOne({ where: { memberId, role: 'self' } });
+  if (selfLink) throw new HttpError(400, '该成员已绑定账户，请先解绑');
 
+  if (role !== 'owner' && role !== 'admin') throw new HttpError(403, '只有代管人或管理员可以删除成员');
+
+  // 检查是否有关联的医疗报告（沿用 v1 文案）
+  const reportCount = await MedicalReport.count({ where: { memberId } });
   if (reportCount > 0) {
     throw new HttpError(400, `无法删除该家庭成员，因为存在 ${reportCount} 份关联的医疗报告`);
   }
 
-  await familyMember.destroy();
+  await sequelize.transaction(async (t) => {
+    await UserMemberLink.destroy({ where: { memberId }, transaction: t });
+    await FamilyMember.destroy({ where: { id: memberId }, transaction: t });
+  });
 }
 
 module.exports = { listByUser, getById, create, update, remove };

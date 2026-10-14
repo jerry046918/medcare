@@ -1,4 +1,4 @@
-const { FamilyMember, UserMemberLink, MedicalReport, ReportIndicatorData, MedicalIndicator, sequelize } = require('../models');
+const { FamilyMember, UserMemberLink, User, MedicalReport, ReportIndicatorData, MedicalIndicator, Medication, MedicalLog, sequelize } = require('../models');
 const accessService = require('./accessService');
 const HttpError = require('../utils/httpError');
 const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../utils/security');
@@ -170,4 +170,97 @@ async function remove(userId, id) {
   });
 }
 
-module.exports = { listByUser, getById, create, update, remove };
+// ===== 授权(links)与合并(merge) =====
+
+// 角色权重:合并 links 冲突时取高者
+const ROLE_RANK = { self: 4, owner: 3, editor: 2, viewer: 1 };
+
+// 成员的授权列表(self/owner/admin 可见)
+async function listLinks(userId, memberId) {
+  const id = validateId(memberId);
+  if (!id) throw new HttpError(400, '无效的成员ID');
+  await accessService.assertAccess(userId, id, 'grant');
+  const links = await UserMemberLink.findAll({
+    where: { memberId: id },
+    include: [{ association: 'user', attributes: ['id', 'username', 'displayName'] }],
+    order: [['createdAt', 'ASC']]
+  });
+  return links.map((l) => ({
+    id: l.id, userId: l.userId, username: l.user?.username, displayName: l.user?.displayName,
+    role: l.role, relationship: l.relationship, createdAt: l.createdAt
+  }));
+}
+
+// 授权:self/owner 仅可授 viewer/editor;admin 另可授 owner 及 self(仅当成员无 self link)
+async function grantLink(userId, memberId, { granteeUserId, role, relationship = '家人' }) {
+  const id = validateId(memberId);
+  if (!id) throw new HttpError(400, '无效的成员ID');
+  const myRole = await accessService.assertAccess(userId, id, 'grant');
+  if (!['viewer', 'editor', 'owner', 'self'].includes(role)) throw new HttpError(400, '无效的授权角色');
+  const isOwnerOrSelf = myRole === 'self' || myRole === 'owner';
+  if (isOwnerOrSelf && !['viewer', 'editor'].includes(role)) {
+    throw new HttpError(403, '只有管理员可以授予该角色');
+  }
+  const grantee = await User.findByPk(granteeUserId);
+  if (!grantee) throw new HttpError(400, '目标用户不存在');
+  if (role === 'self') {
+    const claimed = await UserMemberLink.findOne({ where: { memberId: id, role: 'self' } });
+    if (claimed) throw new HttpError(409, '该成员已绑定账户');
+  }
+  const existing = await UserMemberLink.findOne({ where: { userId: granteeUserId, memberId: id } });
+  if (existing) throw new HttpError(409, '该用户已有此成员的授权');
+  return UserMemberLink.create({ userId: granteeUserId, memberId: id, role, relationship });
+}
+
+// 撤销授权;role='self' 的 link 仅 admin 可删(解绑需管理员)
+async function revokeLink(userId, memberId, linkId) {
+  const id = validateId(memberId);
+  if (!id) throw new HttpError(400, '无效的成员ID');
+  await accessService.assertAccess(userId, id, 'grant');
+  const link = await UserMemberLink.findOne({ where: { id: linkId, memberId: id } });
+  if (!link) throw new HttpError(404, '授权记录不存在');
+  const user = await User.findByPk(userId, { attributes: ['role'] });
+  if (link.role === 'self' && user.role !== 'admin') {
+    throw new HttpError(403, '本人绑定只能由管理员解除');
+  }
+  await link.destroy();
+}
+
+// 合并成员(admin):迁移 reports/medications/medicalLogs 与 links 后删除 source,单事务
+async function merge(userId, { sourceId, targetId }) {
+  const user = await User.findByPk(userId, { attributes: ['role'] });
+  if (user.role !== 'admin') throw new HttpError(403, '只有管理员可以合并成员');
+  if (!sourceId || !targetId || sourceId === targetId) throw new HttpError(400, '无效的合并参数');
+  const source = await FamilyMember.findByPk(sourceId);
+  const target = await FamilyMember.findByPk(targetId);
+  if (!source || !target) throw new HttpError(404, '成员不存在');
+
+  await sequelize.transaction(async (t) => {
+    await MedicalReport.update({ memberId: targetId }, { where: { memberId: sourceId }, transaction: t });
+    await Medication.update({ memberId: targetId }, { where: { memberId: sourceId }, transaction: t });
+    await MedicalLog.update({ memberId: targetId }, { where: { memberId: sourceId }, transaction: t });
+
+    const links = await UserMemberLink.findAll({ where: { memberId: sourceId }, transaction: t });
+    for (const link of links) {
+      const existing = await UserMemberLink.findOne({
+        where: { memberId: targetId, userId: link.userId }, transaction: t });
+      if (!existing) {
+        await UserMemberLink.create(
+          { userId: link.userId, memberId: targetId, role: link.role, relationship: link.relationship },
+          { transaction: t });
+      } else if (link.role === 'self') {
+        // target 已有绑定:保留 target 的 self,source 的降级 owner
+        if (existing.role !== 'self') {
+          await existing.update({ role: 'self', relationship: link.relationship }, { transaction: t });
+          // 原 self 用户在 target 上的其他角色冲突由唯一约束排除(同 userId 只一条 link)
+        }
+      } else if (ROLE_RANK[link.role] > ROLE_RANK[existing.role] && existing.role !== 'self') {
+        await existing.update({ role: link.role, relationship: link.relationship }, { transaction: t });
+      }
+      await link.destroy({ transaction: t });
+    }
+    await source.destroy({ transaction: t });
+  });
+}
+
+module.exports = { listByUser, getById, create, update, remove, listLinks, grantLink, revokeLink, merge };

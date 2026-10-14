@@ -34,3 +34,24 @@ exports.remove = asyncHandler(async (req, res) => {
   await memberService.remove(req.user.id, req.params.id);
   res.json({ success: true, message: '家庭成员删除成功' });
 });
+
+// 授权管理(links)
+exports.listLinks = asyncHandler(async (req, res) => {
+  const data = await memberService.listLinks(req.user.id, req.params.id);
+  res.json({ success: true, data });
+});
+exports.grantLink = asyncHandler(async (req, res) => {
+  const data = await memberService.grantLink(req.user.id, req.params.id, req.body);
+  res.status(201).json({ success: true, message: '授权成功', data });
+});
+exports.revokeLink = asyncHandler(async (req, res) => {
+  await memberService.revokeLink(req.user.id, req.params.id, req.params.linkId);
+  res.json({ success: true, message: '已撤销授权' });
+});
+
+// 合并成员(admin)
+exports.merge = asyncHandler(async (req, res) => {
+  const { sourceId, targetId } = req.body;
+  await memberService.merge(req.user.id, { sourceId, targetId });
+  res.json({ success: true, message: '成员合并成功', data: { sourceId, targetId } });
+});

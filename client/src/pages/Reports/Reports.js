@@ -23,7 +23,8 @@ import {
   DownloadOutlined,
   SearchOutlined,
   FileTextOutlined,
-  UploadOutlined
+  UploadOutlined,
+  CameraOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { fetchReports, deleteReport, clearError } from '../../store/slices/reportSlice';
@@ -216,13 +217,21 @@ const Reports = () => {
       <Card
         title="医疗报告管理"
         extra={
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            onClick={handleAdd}
-          >
-            上传报告
-          </Button>
+          <Space>
+            <Button
+              icon={<CameraOutlined />}
+              onClick={() => navigate('/upload/quick')}
+            >
+              快速上传
+            </Button>
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              onClick={handleAdd}
+            >
+              上传报告
+            </Button>
+          </Space>
         }
       >
         {/* 筛选器 */}

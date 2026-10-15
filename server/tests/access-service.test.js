@@ -10,7 +10,8 @@ async function seed() {
   const alice = await User.create({ username: 'alice', password: 'pass123456' });
   const bob = await User.create({ username: 'bob', password: 'pass123456' });
   const carol = await User.create({ username: 'carol', password: 'pass123456' });
-  const dad = await FamilyMember.create({ name: '爸', gender: '男', relationship: '本人' });
+  // family_members 已无 relationship 列（v2），视角关系只存于 UserMemberLink
+  const dad = await FamilyMember.create({ name: '爸', gender: '男' });
   // alice: self(爸是她本人);bob: owner(代管);carol: viewer;editor 用户:
   const dave = await User.create({ username: 'dave', password: 'pass123456' });
   await UserMemberLink.bulkCreate([

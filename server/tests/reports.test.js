@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getTestApp, createAdmin, auth, request } = require('./helpers/app');
+const { getTestApp, createAdmin, createUser, auth, request } = require('./helpers/app');
+const inviteService = require('../src/services/inviteService');
 
 // 旧实现的 multer diskStorage 不会自动创建目录，上传前必须保证目录存在（与生产行为一致）
 const uploadDir = path.join(__dirname, '..', 'uploads', 'reports');
@@ -207,4 +208,54 @@ test('未认证访问被拒', async () => {
   const { app } = await setup();
   const res = await request(app).get('/api/reports');
   assert.strictEqual(res.status, 401);
+});
+
+// Final Finding 2:/api/files/reports 按报告所属成员的 view 权限放行
+// （此前任何认证用户都能下载任意报告文件）；OCR 目录仍是仅认证。
+test('/api/files/reports 按成员 view 权限放行：viewer 200、陌生人 404、未认证 401', async () => {
+  const app = await getTestApp();
+  const admin = await createAdmin();
+  const member = await auth(request(app).post('/api/members'), admin.token)
+    .send({ name: '文件权限对象', gender: '女', relationship: '配偶' });
+  assert.strictEqual(member.status, 201);
+  const mid = member.body.data.id;
+
+  const create = await auth(request(app).post('/api/reports'), admin.token)
+    .field('familyMemberId', String(mid))
+    .field('reportDate', '2026-10-05')
+    .attach('file', png, { filename: 'acl.png', contentType: 'image/png' });
+  assert.strictEqual(create.status, 201);
+  const filename = path.basename(create.body.data.filePath);
+  const fileUrl = `/api/files/reports/${filename}`;
+
+  // 未认证 → 401（路由仍仅认证可入）
+  const anon = await request(app).get(fileUrl);
+  assert.strictEqual(anon.status, 401);
+
+  // 陌生人（无任何 link）→ 404（与成员不可见同响应，不泄露存在性）
+  const invS = await inviteService.createInvite({ createdById: admin.userId });
+  const stranger = await createUser('fileStranger', {
+    inviteCode: invS.code, memberData: { name: 'fileStranger本人', gender: '男' }
+  });
+  const strangerRes = await auth(request(app).get(fileUrl), stranger.body.data.token);
+  assert.strictEqual(strangerRes.status, 404);
+
+  // 授权 viewer → 200，内容即上传文件
+  const invV = await inviteService.createInvite({ createdById: admin.userId });
+  const viewer = await createUser('fileViewer', {
+    inviteCode: invV.code, memberData: { name: 'fileViewer本人', gender: '男' }
+  });
+  const grant = await auth(request(app).post(`/api/members/${mid}/links`), admin.token)
+    .send({ granteeUserId: viewer.body.data.user.id, role: 'viewer' });
+  assert.strictEqual(grant.status, 201);
+  const viewerRes = await auth(request(app).get(fileUrl), viewer.body.data.token);
+  assert.strictEqual(viewerRes.status, 200);
+  assert.ok(Buffer.isBuffer(viewerRes.body) && viewerRes.body.equals(png), '应返回上传的文件内容');
+
+  // 报告删除后文件随之删除，文件 URL 变 404
+  const del = await auth(request(app).delete(`/api/reports/${create.body.data.id}`), admin.token);
+  assert.strictEqual(del.status, 200);
+  assert.ok(!fs.existsSync(path.join(uploadDir, filename)), '删除报告应删除文件');
+  const afterDel = await auth(request(app).get(fileUrl), admin.token);
+  assert.strictEqual(afterDel.status, 404);
 });

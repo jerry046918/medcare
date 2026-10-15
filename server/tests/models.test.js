@@ -21,7 +21,7 @@ test('User.role 默认 member,可设 admin', async () => {
 test('UserMemberLink 唯一约束 (userId, memberId)', async () => {
   const { models, sequelize } = await freshDb();
   const u = await models.User.create({ username: 'user3', password: '123456' });
-  const m = await models.FamilyMember.create({ name: 'A', gender: '男', relationship: '本人' });
+  const m = await models.FamilyMember.create({ name: 'A', gender: '男' });
   await models.UserMemberLink.create({ userId: u.id, memberId: m.id, role: 'owner', relationship: '父亲' });
   await assert.rejects(
     () => models.UserMemberLink.create({ userId: u.id, memberId: m.id, role: 'viewer' }),

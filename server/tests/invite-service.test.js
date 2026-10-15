@@ -8,7 +8,7 @@ const HttpError = require('../src/utils/httpError');
 async function seed() {
   await sequelize.sync({ force: true });
   const admin = await User.create({ username: 'admin', password: 'pass123456', role: 'admin' });
-  const m = await FamilyMember.create({ name: '爸', gender: '男', relationship: '父亲' });
+  const m = await FamilyMember.create({ name: '爸', gender: '男' });
   await UserMemberLink.create({ userId: admin.id, memberId: m.id, role: 'owner', relationship: '父亲' });
   return { admin, m };
 }

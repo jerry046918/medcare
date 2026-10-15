@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { getTestApp, createAdmin, createUser, auth, request } = require('./helpers/app');
 const inviteService = require('../src/services/inviteService');
+const { InviteCode } = require('../src/models');
 
 async function setup() {
   const app = await getTestApp();
@@ -80,6 +81,45 @@ test('merge:报告与 links 迁移到目标成员', async () => {
   assert.ok(tgtDetail.body.data.reports.some((r) => r.id === report.body.data.id));
   const srcGone = await auth(request(app).get(`/api/members/${src.body.data.id}`), u.token);
   assert.strictEqual(srcGone.status, 404);
+});
+
+// Final Finding 1a:merge 时 source 的专属邀请码改挂 target——
+// 迁移库(migrate-v2 建表,FK NO ACTION)下不改挂会在 source 删除时 SQLITE_CONSTRAINT → 500;
+// sync 库(FK SET NULL)下不改挂会让专属码静默降级为通用码
+test('merge:source 的专属邀请码改挂 target', async () => {
+  const { app, admin } = await setup();
+  const owner = await makeUser(app, admin, 'invMergeOwner');
+  const src = await auth(request(app).post('/api/members'), owner.token)
+    .send({ name: '码源成员', gender: '男', relationship: '父亲' });
+  const tgt = await auth(request(app).post('/api/members'), owner.token)
+    .send({ name: '码目标成员', gender: '女', relationship: '母亲' });
+  const invite = await inviteService.createInvite(
+    { createdById: admin.userId, memberId: src.body.data.id });
+  assert.strictEqual(invite.memberId, src.body.data.id);
+
+  const merged = await auth(request(app).post('/api/members/merge'), admin.token)
+    .send({ sourceId: src.body.data.id, targetId: tgt.body.data.id });
+  assert.strictEqual(merged.status, 200);
+
+  const reloaded = await InviteCode.findByPk(invite.id);
+  assert.strictEqual(reloaded.memberId, tgt.body.data.id, '专属码应指向合并后的目标成员');
+});
+
+// Final Finding 1b:删除成员时其专属邀请码一并清理——
+// 迁移库(FK NO ACTION)下不清理会在删成员时 SQLITE_CONSTRAINT → 500
+test('remove:带专属邀请码的成员可删,码随删', async () => {
+  const { app, admin } = await setup();
+  const owner = await makeUser(app, admin, 'invDelOwner');
+  const created = await auth(request(app).post('/api/members'), owner.token)
+    .send({ name: '带码可删成员', gender: '女', relationship: '姑姑' });
+  const invite = await inviteService.createInvite(
+    { createdById: admin.userId, memberId: created.body.data.id });
+
+  const del = await auth(request(app).delete(`/api/members/${created.body.data.id}`), owner.token);
+  assert.strictEqual(del.status, 200);
+
+  const gone = await InviteCode.findByPk(invite.id);
+  assert.strictEqual(gone, null, '成员专属邀请码应随成员删除');
 });
 
 // Task 10 预检裁定移入本文件的用例:owner 可编辑资料、viewer 编辑被拒;

@@ -266,11 +266,19 @@ async function initDatabase() {
       console.log('创建数据库目录:', dbDir);
     }
     
-    // 确保上传目录存在
+    // 确保上传目录存在（multer diskStorage 不自动建目录，与 Dockerfile 的
+    // mkdir -p uploads/ocr uploads/reports 对齐）
     const uploadsDir = path.join(__dirname, '../uploads');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
       console.log('创建上传目录:', uploadsDir);
+    }
+    for (const sub of ['reports', 'ocr']) {
+      const subDir = path.join(uploadsDir, sub);
+      if (!fs.existsSync(subDir)) {
+        fs.mkdirSync(subDir, { recursive: true });
+        console.log('创建上传子目录:', subDir);
+      }
     }
     
     if (forceReset) {

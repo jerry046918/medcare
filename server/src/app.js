@@ -35,8 +35,9 @@ function createApp() {
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'");
     next();
   });
-  app.use('/api/files', fileRoutes);
+  // /api/files 挂在限流器之后：文件下载同样计入 API 限流（Final Finding 2b）
   app.use('/api/', apiLimiter);
+  app.use('/api/files', fileRoutes);
   const publicPath = path.join(__dirname, '..', 'public');
   if (fs.existsSync(publicPath)) {
     app.use(express.static(publicPath));

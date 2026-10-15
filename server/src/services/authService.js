@@ -77,9 +77,9 @@ async function bindSelfForUser(userId, { mode = 'create', memberData = {}, claim
       throw new HttpError(400, '本人姓名和性别为必填字段');
     }
     if (birthday && !validateDate(birthday)) throw new HttpError(400, '无效的生日日期');
-    // relationship 为旧 schema 必填列（v2 迁移不改约束），本人成员固定写 '本人'
+    // v2：family_members 无 relationship 列（视角关系只存于 UserMemberLink）
     const member = await FamilyMember.create(
-      { name: cleanName, gender, birthday: birthday || null, relationship: '本人' }, { transaction });
+      { name: cleanName, gender, birthday: birthday || null }, { transaction });
     memberId = member.id;
   }
 

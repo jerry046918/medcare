@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { FamilyMember, UserMemberLink, User, MedicalReport, ReportIndicatorData, MedicalIndicator, Medication, MedicalLog, sequelize } = require('../models');
+const { FamilyMember, UserMemberLink, User, MedicalReport, ReportIndicatorData, MedicalIndicator, Medication, MedicalLog, InviteCode, sequelize } = require('../models');
 const accessService = require('./accessService');
 const HttpError = require('../utils/httpError');
 const { sanitizeInput, escapeHtml, validateId, validateDate } = require('../utils/security');
@@ -148,8 +148,8 @@ async function update(userId, id, body) {
   return data;
 }
 
-// 删除成员：owner/admin 专属；已绑定账户（self link）→ 400 先拒；有报告 → 400；
-// 删除时级联删 links + 成员（事务）
+// 删除成员：owner/admin 专属；已绑定账户（self link）→ 400 先拒；有报告/用药/日志 → 400；
+// 删除时级联删 links + 专属邀请码 + 成员（事务；邀请码不清理会触发 FK 500，见 Final Finding 1）
 async function remove(userId, id) {
   const memberId = validateId(id);
   if (!memberId) {
@@ -168,13 +168,23 @@ async function remove(userId, id) {
 
   if (role !== 'owner' && role !== 'admin') throw new HttpError(403, '只有代管人或管理员可以删除成员');
 
-  // 检查是否有关联的医疗报告（沿用 v1 文案）
+  // 关联数据守卫（沿用 v1 文案，扩展用药/日志：清理 400 而非 FK 500）
   const reportCount = await MedicalReport.count({ where: { memberId } });
   if (reportCount > 0) {
     throw new HttpError(400, `无法删除该家庭成员，因为存在 ${reportCount} 份关联的医疗报告`);
   }
+  const medicationCount = await Medication.count({ where: { memberId } });
+  if (medicationCount > 0) {
+    throw new HttpError(400, `无法删除该家庭成员，因为存在 ${medicationCount} 条关联的用药记录`);
+  }
+  const logCount = await MedicalLog.count({ where: { memberId } });
+  if (logCount > 0) {
+    throw new HttpError(400, `无法删除该家庭成员，因为存在 ${logCount} 条关联的医疗日志`);
+  }
 
   await sequelize.transaction(async (t) => {
+    // 成员专属邀请码随成员一并删除（迁移库 FK 为 NO ACTION，不清理会 SQLITE_CONSTRAINT）
+    await InviteCode.destroy({ where: { memberId }, transaction: t });
     await UserMemberLink.destroy({ where: { memberId }, transaction: t });
     await FamilyMember.destroy({ where: { id: memberId }, transaction: t });
   });
@@ -252,6 +262,9 @@ async function merge(userId, { sourceId, targetId }) {
     await MedicalReport.update({ memberId: targetId }, { where: { memberId: sourceId }, transaction: t });
     await Medication.update({ memberId: targetId }, { where: { memberId: sourceId }, transaction: t });
     await MedicalLog.update({ memberId: targetId }, { where: { memberId: sourceId }, transaction: t });
+    // 专属邀请码改挂目标成员（码绑定幸存成员；迁移库 FK 为 NO ACTION，
+    // 不改挂会因 source 删除触发 SQLITE_CONSTRAINT → 500，见 Final Finding 1）
+    await InviteCode.update({ memberId: targetId }, { where: { memberId: sourceId }, transaction: t });
 
     const links = await UserMemberLink.findAll({ where: { memberId: sourceId }, transaction: t });
     for (const link of links) {

@@ -61,6 +61,33 @@ test('删除:有 self link 拒绝;无报告可删', async () => {
   assert.strictEqual(del.status, 200);
 });
 
+// Final Finding e:有用药/日志关联的成员删除给 400(沿用 v1 报告守卫文案模式),
+// 而不是落到 FK 约束 500
+test('删除:有用药记录或医疗日志 → 400', async () => {
+  const { app, admin } = await setup();
+  const u = await makeUser(app, admin, 'del2');
+  const created = await auth(request(app).post('/api/members'), u.token)
+    .send({ name: '有关联可删?', gender: '女', relationship: '女儿' });
+  const mid = created.body.data.id;
+
+  const med = await auth(request(app).post('/api/medications'), u.token)
+    .send({ memberId: mid, name: '维生素C', specification: '100mg/粒', frequency: '每日一次' });
+  assert.strictEqual(med.status, 201);
+  const delWithMed = await auth(request(app).delete(`/api/members/${mid}`), u.token);
+  assert.strictEqual(delWithMed.status, 400);
+  assert.match(delWithMed.body.message, /用药记录/);
+
+  // 清掉用药后,日志同样拦截
+  const { Medication } = require('../src/models');
+  await Medication.destroy({ where: { memberId: mid } });
+  const log = await auth(request(app).post('/api/medical-logs'), u.token)
+    .send({ memberId: mid, logType: 'outpatient', title: '普通复诊', treatmentStartDate: '2026-10-01' });
+  assert.strictEqual(log.status, 201);
+  const delWithLog = await auth(request(app).delete(`/api/members/${mid}`), u.token);
+  assert.strictEqual(delWithLog.status, 400);
+  assert.match(delWithLog.body.message, /医疗日志/);
+});
+
 test('?claimable=1 返回无 self link 的成员(仅基础字段)', async () => {
   const { app, admin } = await setup();
   const u = await makeUser(app, admin, 'claimable1');

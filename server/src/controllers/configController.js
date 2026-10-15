@@ -7,7 +7,8 @@ exports.list = asyncHandler(async (req, res) => {
 });
 
 exports.getByCategory = asyncHandler(async (req, res) => {
-  const data = await configService.getByCategory(req.params.category);
+  // 非管理员对含 apiKey 的分类（ocr）只拿到脱敏值（Final Finding 3）
+  const data = await configService.getByCategory(req.params.category, req.user.role);
   res.json({ success: true, data });
 });
 

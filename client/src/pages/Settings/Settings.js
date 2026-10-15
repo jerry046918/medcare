@@ -21,7 +21,9 @@ import IndicatorPanel from './IndicatorPanel';
 import OCRSettings from './OCRSettings';
 
 // v2 设置页：仅作为 Tabs 壳组合各功能面板；
-// 邀请码/用户管理/成员合并为 admin 专属（后端同样以 requireAdmin 兜底），按 auth.role 条件渲染。
+// 邀请码/用户管理/成员合并/OCR 设置为 admin 专属（后端同样以 requireAdmin 兜底，
+// OCR 设置读取 /api/config/ocr/full，Final Finding 3 起 admin-only），按 auth.role 条件渲染。
+// 指标管理为全体用户共享库，不设角色门槛。
 const Settings = () => {
   const { role } = useSelector(state => state.auth);
   const [activeTab, setActiveTab] = useState('account');
@@ -34,9 +36,9 @@ const Settings = () => {
     ...(role === 'admin' ? [
       { key: 'invites', label: '邀请码', icon: <SafetyCertificateOutlined />, children: <InvitePanel /> },
       { key: 'users', label: '用户管理', icon: <TeamOutlined />, children: <UsersPanel /> },
-      { key: 'merge', label: '成员合并', icon: <MergeCellsOutlined />, children: <MergePanel /> }
-    ] : []),
-    { key: 'ocr', label: 'OCR 设置', icon: <ScanOutlined />, children: <OCRSettings /> }
+      { key: 'merge', label: '成员合并', icon: <MergeCellsOutlined />, children: <MergePanel /> },
+      { key: 'ocr', label: 'OCR 设置', icon: <ScanOutlined />, children: <OCRSettings /> }
+    ] : [])
   ];
 
   return (

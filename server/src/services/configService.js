@@ -23,6 +23,27 @@ function maskOcrSecrets(config) {
 }
 
 /**
+ * 递归脱敏任意结构中的 apiKey 字段（Final Finding 3）。
+ * getByCategory 的 json 值是任意对象，统一按字段名脱敏，避免逐 key 维护白名单；
+ * 非字符串 apiKey 一律置为 '****'。
+ */
+function maskApiKeyDeep(value) {
+  if (Array.isArray(value)) return value.map(maskApiKeyDeep);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'apiKey') {
+        out[k] = typeof v === 'string' && v ? maskSecret(v) : '****';
+      } else {
+        out[k] = maskApiKeyDeep(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
  * GET /api/config
  * 获取所有公开配置
  */
@@ -56,9 +77,11 @@ async function getPublicConfigs() {
 
 /**
  * GET /api/config/:category
- * 获取指定分类的配置
+ * 获取指定分类的配置。
+ * 非管理员调用者（Final Finding 3）：apiKey 一律脱敏（复用 getOcrFull 的 maskSecret），
+ * 管理员返回原始值。
  */
-async function getByCategory(category) {
+async function getByCategory(category, role) {
   try {
     const whereClause = { category };
 
@@ -67,6 +90,7 @@ async function getByCategory(category) {
       order: [['configKey', 'ASC']]
     });
 
+    const isAdmin = role === 'admin';
     const result = {};
     for (const config of configs) {
       let value = config.configValue;
@@ -85,7 +109,7 @@ async function getByCategory(category) {
       }
 
       result[config.configKey] = {
-        value,
+        value: isAdmin ? value : maskApiKeyDeep(value),
         type: config.configType,
         description: config.description
       };
